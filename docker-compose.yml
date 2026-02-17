@@ -1,0 +1,48 @@
+services:
+  takopi:
+    build: .
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+    environment:
+      # Anthropic API key (used by Claude Code via Takopi)
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?}
+
+      # Telegram transport (required)
+      - TAKOPI_TELEGRAM_BOT_TOKEN=${TAKOPI_TELEGRAM_BOT_TOKEN:?}
+      - TAKOPI_TELEGRAM_CHAT_ID=${TAKOPI_TELEGRAM_CHAT_ID:?}
+      - TAKOPI_ALLOWED_USER_IDS=${TAKOPI_ALLOWED_USER_IDS:-}
+
+      # Claude Code model + safety
+      - TAKOPI_CLAUDE_MODEL=${TAKOPI_CLAUDE_MODEL:-claude-opus-4-6}
+      - TAKOPI_CLAUDE_ALLOWED_TOOLS=${TAKOPI_CLAUDE_ALLOWED_TOOLS:-Bash,Read,Edit,Write}
+      - TAKOPI_CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=${TAKOPI_CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS:-false}
+      - TAKOPI_CLAUDE_USE_API_BILLING=${TAKOPI_CLAUDE_USE_API_BILLING:-true}
+
+      # GitHub access (clone/push/PR)
+      - GH_TOKEN=${GH_TOKEN:?}
+      - GITHUB_REPOS=${GITHUB_REPOS:-}
+
+      # Takopi UX
+      - TAKOPI_SESSION_MODE=${TAKOPI_SESSION_MODE:-chat}
+      - TAKOPI_SHOW_RESUME_LINE=${TAKOPI_SHOW_RESUME_LINE:-true}
+      - TAKOPI_DEFAULT_ENGINE=${TAKOPI_DEFAULT_ENGINE:-claude}
+
+    volumes:
+      - takopi_state:/home/agent/.takopi
+      - repos:/work/repos
+
+    working_dir: /work/repos
+
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "4.0"
+        reservations:
+          memory: 1G
+          cpus: "1.0"
+
+volumes:
+  takopi_state:
+  repos:

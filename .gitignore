@@ -1,0 +1,19 @@
+# environment
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# local data
+data/
+repos/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
