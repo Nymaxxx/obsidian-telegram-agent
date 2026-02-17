@@ -22,6 +22,17 @@ services:
       # GitHub access (clone/push/PR)
       - GH_TOKEN=${GH_TOKEN:?}
       - GITHUB_REPOS=${GITHUB_REPOS:-}
+      - AUTO_SETUP_REPOS=${AUTO_SETUP_REPOS:-true}
+
+      # Voice transcription (send voice messages in Telegram)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - VOICE_TRANSCRIPTION=${VOICE_TRANSCRIPTION:-false}
+      - VOICE_TRANSCRIPTION_MODEL=${VOICE_TRANSCRIPTION_MODEL:-gpt-4o-mini-transcribe}
+      - VOICE_TRANSCRIPTION_BASE_URL=${VOICE_TRANSCRIPTION_BASE_URL:-}
+      - VOICE_TRANSCRIPTION_API_KEY=${VOICE_TRANSCRIPTION_API_KEY:-}
+
+      # Claude Code Tasks (persistent cross-session task tracking)
+      - CLAUDE_CODE_TASK_LIST_ID=${CLAUDE_CODE_TASK_LIST_ID:-takopi-homelab}
 
       # Takopi UX
       - TAKOPI_SESSION_MODE=${TAKOPI_SESSION_MODE:-chat}
@@ -30,6 +41,7 @@ services:
 
     volumes:
       - takopi_state:/home/agent/.takopi
+      - claude_state:/home/agent/.claude
       - repos:/work/repos
 
     working_dir: /work/repos
@@ -45,4 +57,5 @@ services:
 
 volumes:
   takopi_state:
+  claude_state:
   repos:
