@@ -1,61 +1,65 @@
 services:
-  takopi:
-    build: .
+  sing-box:
+    image: ghcr.io/sagernet/sing-box:latest
+    container_name: sing-box
     restart: unless-stopped
-    stop_grace_period: 15s
-
-    environment:
-      # Anthropic API key (used by Claude Code via Takopi)
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:?}
-
-      # Telegram transport (required)
-      - TAKOPI_TELEGRAM_BOT_TOKEN=${TAKOPI_TELEGRAM_BOT_TOKEN:?}
-      - TAKOPI_TELEGRAM_CHAT_ID=${TAKOPI_TELEGRAM_CHAT_ID:?}
-      - TAKOPI_ALLOWED_USER_IDS=${TAKOPI_ALLOWED_USER_IDS:-}
-
-      # Claude Code model + safety
-      - TAKOPI_CLAUDE_MODEL=${TAKOPI_CLAUDE_MODEL:-claude-opus-4-6}
-      - TAKOPI_CLAUDE_ALLOWED_TOOLS=${TAKOPI_CLAUDE_ALLOWED_TOOLS:-Bash,Read,Edit,Write}
-      - TAKOPI_CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=${TAKOPI_CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS:-false}
-      - TAKOPI_CLAUDE_USE_API_BILLING=${TAKOPI_CLAUDE_USE_API_BILLING:-true}
-
-      # GitHub access (clone/push/PR)
-      - GH_TOKEN=${GH_TOKEN:?}
-      - GITHUB_REPOS=${GITHUB_REPOS:-}
-      - AUTO_SETUP_REPOS=${AUTO_SETUP_REPOS:-true}
-
-      # Voice transcription (send voice messages in Telegram)
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - VOICE_TRANSCRIPTION=${VOICE_TRANSCRIPTION:-false}
-      - VOICE_TRANSCRIPTION_MODEL=${VOICE_TRANSCRIPTION_MODEL:-gpt-4o-mini-transcribe}
-      - VOICE_TRANSCRIPTION_BASE_URL=${VOICE_TRANSCRIPTION_BASE_URL:-}
-      - VOICE_TRANSCRIPTION_API_KEY=${VOICE_TRANSCRIPTION_API_KEY:-}
-
-      # Claude Code Tasks (persistent cross-session task tracking)
-      - CLAUDE_CODE_TASK_LIST_ID=${CLAUDE_CODE_TASK_LIST_ID:-takopi-homelab}
-
-      # Takopi UX
-      - TAKOPI_SESSION_MODE=${TAKOPI_SESSION_MODE:-chat}
-      - TAKOPI_SHOW_RESUME_LINE=${TAKOPI_SHOW_RESUME_LINE:-true}
-      - TAKOPI_DEFAULT_ENGINE=${TAKOPI_DEFAULT_ENGINE:-claude}
-
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    security_opt:
+      - no-new-privileges:true
     volumes:
-      - takopi_state:/home/agent/.takopi
-      - claude_state:/home/agent/.claude
-      - repos:/work/repos
+      - ./sing-box:/etc/sing-box
+    environment:
+      TZ: "${TZ:-Europe/Amsterdam}"
+    command: -D /var/lib/sing-box -C /etc/sing-box run
 
-    working_dir: /work/repos
+  takopi:
+    build:
+      context: ./takopi
+    container_name: takopi
+    restart: unless-stopped
+    depends_on:
+      - sing-box
+    network_mode: "service:sing-box"
+    stdin_open: true
+    tty: true
+    environment:
+      TZ: "${TZ:-Europe/Amsterdam}"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      TAKOPI_DEFAULT_ENGINE: "${TAKOPI_DEFAULT_ENGINE:-claude}"
+      TAKOPI_DEFAULT_PROJECT: "${TAKOPI_DEFAULT_PROJECT:-obsidian}"
+      TAKOPI_SESSION_MODE: "${TAKOPI_SESSION_MODE:-chat}"
+      TAKOPI_SHOW_RESUME_LINE: "${TAKOPI_SHOW_RESUME_LINE:-true}"
+      TAKOPI_MESSAGE_OVERFLOW: "${TAKOPI_MESSAGE_OVERFLOW:-split}"
+      TAKOPI_TOPICS_ENABLED: "${TAKOPI_TOPICS_ENABLED:-false}"
+      TAKOPI_TOPICS_SCOPE: "${TAKOPI_TOPICS_SCOPE:-auto}"
+      CLAUDE_MODEL: "${CLAUDE_MODEL:-claude-sonnet-4-5-20250929}"
+      CLAUDE_ALLOWED_TOOLS: '${CLAUDE_ALLOWED_TOOLS:-["Bash","Read","Edit","Write"]}'
+      CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS: "${CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS:-false}"
+      CLAUDE_USE_API_BILLING: "${CLAUDE_USE_API_BILLING:-false}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      VOICE_TRANSCRIPTION_ENABLED: "${VOICE_TRANSCRIPTION_ENABLED:-false}"
+      VOICE_TRANSCRIPTION_MODEL: "${VOICE_TRANSCRIPTION_MODEL:-gpt-4o-mini-transcribe}"
+      VOICE_TRANSCRIPTION_BASE_URL: "${VOICE_TRANSCRIPTION_BASE_URL:-}"
+      VOICE_TRANSCRIPTION_API_KEY: "${VOICE_TRANSCRIPTION_API_KEY:-}"
+    volumes:
+      - ./vault:/vault
+      - ./takopi-state:/state
 
-    deploy:
-      resources:
-        limits:
-          memory: 4G
-          cpus: "4.0"
-        reservations:
-          memory: 1G
-          cpus: "1.0"
-
-volumes:
-  takopi_state:
-  claude_state:
-  repos:
+  obsidian-headless:
+    build:
+      context: ./obsidian-headless
+    container_name: obsidian-headless
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    environment:
+      TZ: "${TZ:-Europe/Amsterdam}"
+      OBSIDIAN_AUTOSTART_SYNC: "${OBSIDIAN_AUTOSTART_SYNC:-false}"
+    volumes:
+      - ./vault:/vault
+      - ./obsidian-state:/state

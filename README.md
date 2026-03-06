@@ -1,257 +1,317 @@
-# Takopi + Claude Code on Homelab via Coolify
+# Takopi + Claude + Obsidian Sync + VLESS sidecar
 
-Self-hosted Telegram-controlled coding agent. Deploys [Takopi](https://github.com/banteg/takopi) with [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) (model: `claude-opus-4-6`) on your homelab.
+A homelab-ready stack for controlling an Obsidian vault from Telegram with text or voice messages.
 
-No inbound HTTP required (no Traefik needed). The stack only talks outbound to Telegram, GitHub, and Anthropic API.
+The design is:
+- **Takopi** handles Telegram chat, routing, and voice-note transcription.
+- **Claude Code CLI** is the engine Takopi calls under the hood.
+- **sing-box** is a **VLESS sidecar** in TUN mode, so all Takopi outbound traffic goes through your VLESS tunnel.
+- **Obsidian Headless** keeps the same vault synced through **Obsidian Sync**.
+- **Obsidian desktop/mobile** remains your normal UI for reading and manual editing.
 
-## Quick Start
+## What this repository gives you
 
-### 1. Deploy in Coolify (Docker Compose build pack)
-
-1. Create a new application from this Git repo
-2. Build pack: **Docker Compose**
-3. Set required environment variables (see below)
-4. Deploy
-
-### 2. Environment Variables
-
-Copy `.env.example` to `.env` and fill in the values:
-
-**Required:**
-
-| Variable | Description |
-|----------|-------------|
-| `ANTHROPIC_API_KEY` | Anthropic API key for Claude Code |
-| `TAKOPI_TELEGRAM_BOT_TOKEN` | Telegram bot token from @BotFather |
-| `TAKOPI_TELEGRAM_CHAT_ID` | Telegram chat ID for the bot |
-| `GH_TOKEN` | GitHub personal access token (`repo` + `workflow` scopes) |
-
-**Optional:**
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TAKOPI_ALLOWED_USER_IDS` | _(empty)_ | Comma-separated Telegram user IDs allowed to interact |
-| `GITHUB_REPOS` | _(empty)_ | Auto-clone repos on startup: `owner/repo:alias,owner/repo2` |
-| `AUTO_SETUP_REPOS` | `true` | Auto-detect and install dependencies after cloning |
-| `CLAUDE_CODE_TASK_LIST_ID` | `takopi-homelab` | Shared task list ID for persistent cross-session task tracking |
-| `OPENAI_API_KEY` | _(empty)_ | OpenAI API key for voice transcription (or local Whisper) |
-| `VOICE_TRANSCRIPTION` | `false` | Enable voice message transcription |
-| `VOICE_TRANSCRIPTION_MODEL` | `gpt-4o-mini-transcribe` | STT model name |
-| `VOICE_TRANSCRIPTION_BASE_URL` | _(empty)_ | Custom base URL for local Whisper server |
-| `VOICE_TRANSCRIPTION_API_KEY` | _(empty)_ | API key override for local Whisper server |
-| `TAKOPI_CLAUDE_MODEL` | `claude-opus-4-6` | Claude model to use |
-| `TAKOPI_CLAUDE_ALLOWED_TOOLS` | `Bash,Read,Edit,Write` | Tools available to Claude |
-| `TAKOPI_CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS` | `false` | Skip permission prompts (dangerous!) |
-| `TAKOPI_CLAUDE_USE_API_BILLING` | `true` | Use API billing vs Pro subscription |
-| `TAKOPI_SESSION_MODE` | `chat` | Session mode: `chat` or `oneshot` |
-| `TAKOPI_SHOW_RESUME_LINE` | `true` | Show resume line in Telegram |
-| `TAKOPI_DEFAULT_ENGINE` | `claude` | Default engine |
-
-### 3. Auto-cloning Repos
-
-Set `GITHUB_REPOS` to automatically clone and register projects on startup:
-
-```
-GITHUB_REPOS=myorg/backend:back,myorg/frontend:front
-```
-
-Format: `owner/repo:alias` (alias is optional; defaults to repo name). Existing repos are pulled (`--ff-only`) instead of re-cloned.
-
-### 4. Auto-setup (Dependency Installation)
-
-When `AUTO_SETUP_REPOS=true` (default), the entrypoint automatically detects the project type and installs dependencies after cloning:
-
-| Detected file | Action |
-|---------------|--------|
-| `.takopi-setup.sh` | Runs the custom script (highest priority) |
-| `package-lock.json` | `npm ci` |
-| `yarn.lock` | `yarn install --frozen-lockfile` |
-| `pnpm-lock.yaml` | `pnpm install --frozen-lockfile` |
-| `package.json` (no lockfile) | `npm install` |
-| `pyproject.toml` | `uv sync` |
-| `requirements.txt` | `uv pip install -r requirements.txt` |
-| `go.mod` | `go mod download` |
-| `Cargo.toml` | `cargo fetch` |
-
-To use a custom setup script, create `.takopi-setup.sh` in your repo root:
-
-```bash
-#!/bin/bash
-npm ci
-npx prisma generate
-cp .env.example .env
-```
-
-Set `AUTO_SETUP_REPOS=false` to disable auto-setup entirely.
-
-### 5. Persistent Task Tracking
-
-Claude Code's built-in Tasks system is enabled by default. Tasks persist across sessions on disk (`~/.claude/tasks/`), so the agent remembers what it was working on even after restarts.
-
-**How it works:**
-- The agent checks `TaskList` at the start of every session for unfinished work
-- Complex requests are automatically broken into subtasks with dependency tracking
-- Tasks support `blockedBy` relationships — the agent won't start blocked tasks until prerequisites are done
-- All task state survives container restarts (stored in the `claude_state` volume)
-
-**Shared task lists:** Multiple Claude Code sessions can share the same task list via `CLAUDE_CODE_TASK_LIST_ID`. By default it's set to `takopi-homelab`, but you can set a custom value per project or team.
-
-**Example flow:**
-1. You send: `/back implement user auth with JWT`
-2. Agent creates tasks: "add JWT dependency", "create auth middleware", "add login endpoint", "add tests"
-3. Agent works through tasks, marking each as completed
-4. If session is interrupted, next session picks up where it left off
-
-### 6. Voice Messages
-
-Send voice messages in Telegram instead of typing. Takopi transcribes them and processes as text.
-
-**Option A: OpenAI API (cloud)**
-
-```
-OPENAI_API_KEY=sk-...
-VOICE_TRANSCRIPTION=true
-```
-
-Uses `gpt-4o-mini-transcribe` by default — fast and cheap (~$0.01/min).
-
-**Option B: Local Whisper server (self-hosted)**
-
-If you run a local [whisper.cpp](https://github.com/ggerganov/whisper.cpp) or [faster-whisper-server](https://github.com/fedirz/faster-whisper-server) on your homelab:
-
-```
-VOICE_TRANSCRIPTION=true
-VOICE_TRANSCRIPTION_BASE_URL=http://whisper-server:8000/v1
-VOICE_TRANSCRIPTION_API_KEY=local
-VOICE_TRANSCRIPTION_MODEL=whisper-1
-```
-
-No OpenAI key needed — all processing stays on your hardware.
-
-### 7. Agent Rules (CLAUDE.md)
-
-The `templates/CLAUDE.md` file is automatically deployed to each cloned repo that doesn't already have a `CLAUDE.md`. This file instructs the Claude Code agent on how to work autonomously:
-
-- PR-first workflow (never push to main)
-- Codebase exploration strategy
-- Test and lint before committing
-- Error handling and recovery
-- Safety constraints
-
-**Per-repo customization:** If a repo already has its own `CLAUDE.md`, it is preserved and the template is not overwritten. This lets you tailor agent behavior per project.
-
-## Usage from Telegram
-
-```
-/back fix the login bug in auth.py
-/front add dark mode toggle to settings
-```
-
-Or with explicit engine:
-
-```
-/claude /back refactor the database layer
-```
+- `docker-compose.yml`
+- a `takopi` image with Takopi + Claude Code CLI preinstalled
+- an `obsidian-headless` image with Obsidian Headless preinstalled
+- `sing-box` VLESS config templates
+- helper scripts to render `sing-box/config.json`
+- a starter vault layout
+- a README with the full bring-up flow
 
 ## Architecture
 
-```
-┌─────────────┐     ┌──────────────┐     ┌───────────────┐
-│  Telegram    │◄───►│   Takopi     │────►│  Claude Code  │
-│  (you)       │     │  (agent)     │     │  CLI          │
-└─────────────┘     └──────┬───────┘     └───────┬───────┘
-                           │                     │
-                    ┌──────┴───────┐     ┌───────┴───────┐
-                    │  GitHub      │     │  Anthropic    │
-                    │  (repos/PRs) │     │  API          │
-                    └──────────────┘     └───────────────┘
+```text
+Telegram text / voice
+        |
+        v
+      Takopi  --(all outbound traffic via sing-box/VLESS)--> Telegram / Claude / transcription API
+        |
+        v
+   /vault (shared bind mount)
+        |
+        +--> Obsidian Headless --(Obsidian Sync)--> your desktop / mobile Obsidian apps
 ```
 
-## File Structure
+## Important caveats
 
-```
+- **Obsidian Headless is open beta.** Back up the vault before using it.
+- **Do not use both desktop Sync and Headless Sync on the same device.** Use only one sync method per device.
+- **Takopi shells out to local engine CLIs.** In this stack, that engine is `claude`.
+- **Takopi cannot answer Claude permission prompts in non-interactive mode.** Keep allowed tools narrow and verify Claude permissions before relying on unattended runs.
+- The provided `sing-box` templates cover **VLESS + TLS** and **VLESS + REALITY**. If you use **WS/gRPC** or a more unusual transport, adjust the config manually.
+
+## Prerequisites
+
+You need:
+- a Linux host with Docker and Docker Compose
+- `/dev/net/tun` available on the host
+- a VLESS endpoint you control or trust
+- a Telegram bot token and the chat id where Takopi should listen
+- access to Claude Code
+- an Obsidian Sync subscription if you want server-side sync
+- optionally an OpenAI key or a local OpenAI-compatible Whisper endpoint for Telegram voice-note transcription
+
+## Repository layout
+
+```text
 .
-├── Dockerfile              # Ubuntu 24.04 + uv + takopi + Claude Code
-├── docker-compose.yml      # Service definition with resource limits
-├── entrypoint.sh           # Bootstrap: config, git auth, repo clone, auto-setup, start
-├── templates/
-│   └── CLAUDE.md           # Agent rules template (auto-deployed into repos)
-├── .env.example            # Environment variable template
-├── .dockerignore           # Build context exclusions
-└── .gitignore
+├─ docker-compose.yml
+├─ .env.example
+├─ AGENTS.md
+├─ README.md
+├─ scripts/
+│  ├─ bootstrap.sh
+│  ├─ render-singbox-config.sh
+│  ├─ auth-claude.sh
+│  └─ auth-obsidian.sh
+├─ sing-box/
+│  ├─ config.tls.json.template
+│  └─ config.reality.json.template
+├─ takopi/
+│  ├─ Dockerfile
+│  └─ entrypoint.sh
+├─ obsidian-headless/
+│  ├─ Dockerfile
+│  └─ entrypoint.sh
+└─ vault/
+   ├─ Inbox/
+   ├─ Daily/
+   ├─ Projects/
+   └─ templates/
+      └─ note.md
 ```
 
-## Volumes
+## Quick start
 
-| Volume | Mount | Purpose |
-|--------|-------|---------|
-| `takopi_state` | `/home/agent/.takopi` | Takopi config and session state |
-| `claude_state` | `/home/agent/.claude` | Claude Code tasks, settings, and session data |
-| `repos` | `/work/repos` | Cloned repositories |
-
-## Updating
-
-### Update Takopi version
-
-Change `TAKOPI_VERSION` in the `Dockerfile` and redeploy:
-
-```dockerfile
-ARG TAKOPI_VERSION=0.22.1
-```
-
-### Update configuration
-
-Environment variable changes take effect on the next container restart -- the config is regenerated from env vars on every start.
-
-### Full rebuild
+### 1. Copy the environment template
 
 ```bash
-docker compose build --no-cache
-docker compose up -d
+cp .env.example .env
 ```
 
-### Reset state
+Fill in at least:
+- `TELEGRAM_BOT_TOKEN`
+- `TELEGRAM_CHAT_ID`
+- `VLESS_*`
 
-To start fresh (removes config and cloned repos):
+If you want voice notes, also fill in either:
+- `OPENAI_API_KEY`, or
+- `VOICE_TRANSCRIPTION_BASE_URL` and optionally `VOICE_TRANSCRIPTION_API_KEY`
+
+### 2. Render the VLESS sidecar config
+
+For plain TLS VLESS:
 
 ```bash
-docker compose down -v
-docker compose up -d
+./scripts/render-singbox-config.sh
 ```
 
-## Resource Limits
+If `VLESS_MODE=reality`, the same script renders a REALITY config instead.
 
-Default limits in `docker-compose.yml`:
+This writes `sing-box/config.json`, which is the file actually used by the container.
 
-- **Memory:** 4 GB (reservation: 1 GB)
-- **CPU:** 4 cores (reservation: 1.0)
+### 3. Create directories and check host prerequisites
 
-Adjust in `docker-compose.yml` under `deploy.resources` if needed.
+```bash
+./scripts/bootstrap.sh
+```
 
-## Troubleshooting
+This creates the local state directories and reminds you about `/dev/net/tun`.
 
-**Bot doesn't respond in Telegram:**
-- Check that `TAKOPI_TELEGRAM_BOT_TOKEN` and `TAKOPI_TELEGRAM_CHAT_ID` are correct
-- Verify `TAKOPI_ALLOWED_USER_IDS` includes your Telegram user ID (or leave empty to allow all)
-- Check container logs: `docker compose logs -f takopi`
+### 4. Build and start the stack
 
-**Repos not cloning:**
-- Verify `GH_TOKEN` has `repo` scope
-- Check the format: `owner/repo:alias`
-- Look for `WARNING` lines in container logs
+```bash
+docker compose up -d --build
+```
 
-**Auto-setup fails:**
-- Check that required toolchains are available in the container (Node.js, Go, Rust need to be added to the Dockerfile if needed)
-- Use a custom `.takopi-setup.sh` script for non-standard setups
-- Set `AUTO_SETUP_REPOS=false` to skip auto-setup and let the agent handle it
+At this point:
+- `sing-box` should come up with your VLESS client config
+- `takopi` should start and render `takopi.toml` into `/state/.takopi/takopi.toml`
+- `obsidian-headless` will stay idle until sync is configured or `OBSIDIAN_AUTOSTART_SYNC=true`
 
-**Claude errors:**
-- Verify `ANTHROPIC_API_KEY` is valid and has billing set up
-- Check model name is correct in `TAKOPI_CLAUDE_MODEL`
+### 5. Authenticate Claude Code
 
-## Security Notes
+#### Option A: interactive Claude login
 
-- GH_TOKEN is stored in an agent-owned file (`chmod 600`) at `/home/agent/.gitconfig`
-- Never set `TAKOPI_CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true` unless you fully trust the environment
-- The `CLAUDE.md` template enforces PR-first workflow to prevent direct pushes to main
-- Git user identity is set to `takopi-agent` to clearly identify agent commits
+```bash
+./scripts/auth-claude.sh
+```
+
+This opens an interactive `claude` session inside the `takopi` container.
+
+#### Option B: API billing
+
+Set these in `.env`:
+
+```env
+CLAUDE_USE_API_BILLING=true
+ANTHROPIC_API_KEY=...
+```
+
+Then restart `takopi`:
+
+```bash
+docker compose up -d takopi
+```
+
+### 6. Configure Obsidian Headless Sync
+
+Login:
+
+```bash
+./scripts/auth-obsidian.sh login
+```
+
+List remote vaults:
+
+```bash
+./scripts/auth-obsidian.sh list
+```
+
+Attach the local `/vault` directory to your remote vault:
+
+```bash
+./scripts/auth-obsidian.sh setup "My Vault"
+```
+
+Then enable continuous sync by setting in `.env`:
+
+```env
+OBSIDIAN_AUTOSTART_SYNC=true
+```
+
+Restart the service:
+
+```bash
+docker compose up -d obsidian-headless
+```
+
+### 7. Test the bot
+
+Text:
+
+```text
+создай заметку в Inbox с названием Идея про homelab memory
+```
+
+Or explicitly target the configured project:
+
+```text
+/obsidian создай заметку в Inbox с названием Идея про homelab memory
+```
+
+Voice notes also work if you enabled transcription.
+
+## How Takopi is configured here
+
+The `takopi` container renders this kind of config into `/state/.takopi/takopi.toml` at startup:
+
+- `default_engine = "claude"`
+- `default_project = "obsidian"`
+- `transport = "telegram"`
+- Telegram bot token and chat id under `[transports.telegram]`
+- project alias `obsidian` bound to `/vault`
+- Claude runner settings under `[claude]`
+
+That means you can talk to the bot in three main ways:
+- **plain text** in the configured chat
+- **voice notes**, which Takopi transcribes into normal text messages
+- **explicit directives** such as `/claude` or `/obsidian`
+
+Examples:
+
+```text
+/claude суммаризируй папку Projects
+/obsidian создай заметку в Inbox с названием Встреча с юристом
+/obsidian перепиши заметку Projects/OSINT.md в более продуктовый стиль
+```
+
+## How the VLESS sidecar works
+
+`takopi` runs with:
+
+```yaml
+network_mode: "service:sing-box"
+```
+
+So `takopi` uses the network namespace of `sing-box`. In practice this means:
+- Takopi has **no separate Docker network of its own**
+- all Takopi outbound traffic goes through the VLESS tunnel handled by `sing-box`
+- the shared vault mount still works normally because volumes are local filesystem mounts, not network traffic
+
+By design in this repo, **Obsidian Headless does not use the VLESS sidecar**. That keeps sync behavior simpler and easier to debug.
+
+## Local transcription / local LAN services
+
+The `sing-box` TUN config excludes common RFC1918 private ranges from redirection:
+- `10.0.0.0/8`
+- `172.16.0.0/12`
+- `192.168.0.0/16`
+- `127.0.0.0/8`
+
+That makes it easier to talk from Takopi to a **local Whisper server** or another service on your LAN without forcing those requests through VLESS.
+
+If your local network uses different ranges, adjust `route_exclude_address` in `sing-box/config.json`.
+
+## Typical operations
+
+### Follow logs
+
+```bash
+docker compose logs -f sing-box
+docker compose logs -f takopi
+docker compose logs -f obsidian-headless
+```
+
+### Check the generated Takopi config
+
+```bash
+docker compose exec takopi sh -lc 'cat /state/.takopi/takopi.toml'
+```
+
+### Check the external IP seen by Takopi
+
+```bash
+docker compose exec takopi sh -lc 'which curl >/dev/null 2>&1 || (apt-get update && apt-get install -y curl); curl https://ifconfig.me'
+```
+
+The IP should be the one exposed by your VLESS exit, not the host's direct IP.
+
+### Test Obsidian sync status
+
+```bash
+docker compose exec obsidian-headless ob sync-status --path /vault
+```
+
+## Recommended hardening and operational notes
+
+- Keep the allowed Claude tool set narrow.
+- Put the vault under git if you want an easy audit trail of agent edits.
+- Do not let the bot edit `.obsidian/` by default.
+- Start with `Inbox/`, `Daily/`, and `Projects/` only.
+- If you use a group chat, consider enabling Takopi trigger mode `mentions` after initial setup.
+
+## What is not included yet
+
+This repository does **not** implement custom safe slash-commands like:
+- `/capture`
+- `/append`
+- `/summarize`
+- `/revise`
+
+Right now this stack relies on general Claude/Takopi behavior over the vault path. That is good for an MVP. If you want stricter and safer vault operations, the next step is adding a small Takopi plugin or wrapper scripts for note-specific commands.
+
+## Sources
+
+This repo is based on the current upstream behavior of:
+- Takopi install, config, projects, Telegram transport, voice notes, and Claude runner
+- Obsidian Headless and Headless Sync
+- sing-box Docker install, VLESS outbound, and TUN behavior
+- Claude Code install, settings path, and authentication / permissions model
+
+See these upstream docs when you adapt the stack:
+- Takopi: https://takopi.dev/
+- Obsidian Headless / Sync: https://help.obsidian.md/
+- sing-box: https://sing-box.sagernet.org/
+- Claude Code: https://docs.anthropic.com/ and https://code.claude.com/

@@ -1,19 +1,7 @@
-# environment
 .env
-.env.*
-!.env.example
-
-# OS
-.DS_Store
-Thumbs.db
-
-# local data
-data/
-repos/
-
-# IDE
+sing-box/config.json
+sing-box/*.generated.json
+takopi-state/
+obsidian-state/
 .vscode/
-.idea/
-*.swp
-*.swo
-*~
+.DS_Store
