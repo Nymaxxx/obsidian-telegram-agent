@@ -68,9 +68,16 @@ You need:
 │  ├─ Dockerfile
 │  └─ entrypoint.sh
 └─ vault/
-   ├─ Inbox/
-   ├─ Daily/
-   ├─ Projects/
+   ├─ 00 Projects/
+   ├─ 10 Areas/
+   │  ├─ Inbox/
+   │  ├─ Todo/
+   │  │  ├─ Daily notes/
+   │  │  ├─ Long goals/
+   │  │  └─ Short goals/
+   │  └─ Общие заметки/
+   ├─ 20 Resources/
+   ├─ 90 Archive/
    └─ templates/
       └─ note.md
 ```
@@ -164,13 +171,13 @@ docker compose up -d obsidian-headless
 Text:
 
 ```text
-создай заметку в Inbox с названием Идея про homelab
+создай заметку в 10 Areas/Inbox с названием Идея про homelab
 ```
 
 Or explicitly target the configured project:
 
 ```text
-/obsidian создай заметку в Inbox с названием Идея про homelab
+/obsidian создай заметку в 10 Areas/Inbox с названием Идея про homelab
 ```
 
 Voice notes also work if you enabled transcription.
@@ -261,9 +268,9 @@ That means you can talk to the bot in three main ways:
 Examples:
 
 ```text
-/claude суммаризируй папку Projects
-/obsidian создай заметку в Inbox с названием Встреча с юристом
-/obsidian перепиши заметку Projects/OSINT.md в более продуктовый стиль
+/claude суммаризируй папку 00 Projects
+/obsidian создай заметку в 10 Areas/Inbox с названием Встреча с юристом
+/obsidian перепиши заметку 00 Projects/OSINT mindset/OSINT.md в более продуктовый стиль
 ```
 
 ## Typical operations
@@ -309,7 +316,7 @@ docker inspect --format='{{.State.Health.Status}}' takopi
 - Keep the allowed Claude tool set narrow.
 - Put the vault under git if you want an easy audit trail of agent edits.
 - Do not let the bot edit `.obsidian/` by default.
-- Start with `Inbox/`, `Daily/`, and `Projects/` only.
+- Start with the PARA folders defined in `AGENTS.md`.
 - If you use a group chat, consider enabling Takopi trigger mode `mentions` after initial setup.
 
 ## What is not included yet
