@@ -55,7 +55,6 @@ You need:
 │     └─ deploy.yml        ← auto-deploy on push to main
 ├─ docker-compose.yml
 ├─ .env.example
-├─ AGENTS.md
 ├─ README.md
 ├─ Makefile
 ├─ scripts/
@@ -68,6 +67,7 @@ You need:
 │  ├─ Dockerfile
 │  └─ entrypoint.sh
 └─ vault/
+   ├─ CLAUDE.md              ← agent instructions (read by Claude Code at /vault)
    ├─ 00 Projects/
    ├─ 10 Areas/
    │  ├─ Inbox/
@@ -243,7 +243,7 @@ If you want voice notes, also fill in either:
 
 | Path | Contents | Survives `git pull` |
 |---|---|---|
-| `./vault/` | Your Obsidian notes | Yes — notes (`.md`) and `.obsidian/` are gitignored; only folder structure and templates are tracked |
+| `./vault/` | Your Obsidian notes | Yes — notes (`.md`) and `.obsidian/` are gitignored; `CLAUDE.md`, folder structure, and templates are tracked |
 | `./takopi-state/` | Claude auth token | Yes — gitignored |
 | `./obsidian-state/` | Obsidian Sync auth | Yes — gitignored |
 
@@ -312,7 +312,7 @@ docker inspect --format='{{.State.Health.Status}}' takopi
 
 ## Vault isolation
 
-`90 Archive/` is hidden from the `takopi` container at the Docker level. A tmpfs is mounted over `/vault/90 Archive` with `mode=0000`, so Claude physically cannot read, list, or write anything there — even if it ignores `AGENTS.md` instructions.
+`90 Archive/` is hidden from the `takopi` container at the Docker level. A tmpfs is mounted over `/vault/90 Archive` with `mode=0000`, so Claude physically cannot read, list, or write anything there — even if it ignores the `CLAUDE.md` rules.
 
 Obsidian Headless still sees the full vault and syncs `90 Archive/` normally.
 
@@ -320,8 +320,8 @@ To hide additional folders from the agent, add more entries under `tmpfs:` in `d
 
 ```yaml
 tmpfs:
-  - /vault/90 Archive:size=1k,mode=0000
-  - /vault/Some Other Folder:size=1k,mode=0000
+  - "/vault/90 Archive:size=1k,mode=0000"
+  - "/vault/Some Other Folder:size=1k,mode=0000"
 ```
 
 ## Recommended hardening and operational notes
@@ -330,7 +330,7 @@ tmpfs:
 - Keep the allowed Claude tool set narrow.
 - Put the vault under git if you want an easy audit trail of agent edits.
 - Do not let the bot edit `.obsidian/` by default.
-- Start with the PARA folders defined in `AGENTS.md`.
+- Start with the PARA folders defined in `CLAUDE.md`.
 - If you use a group chat, consider enabling Takopi trigger mode `mentions` after initial setup.
 
 ## What is not included yet
