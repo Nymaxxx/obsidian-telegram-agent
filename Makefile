@@ -1,12 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: bootstrap render up down logs auth-claude auth-obsidian
-
-bootstrap:
-	./scripts/bootstrap.sh
-
-render:
-	./scripts/render-singbox-config.sh
+.PHONY: up down logs auth-claude auth-obsidian
 
 up:
 	docker compose up -d --build

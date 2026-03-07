@@ -1,0 +1,49 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract Telegram credentials for notifications
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: |
+          echo "TG_TOKEN=$(echo "$ENV_FILE" | grep '^TELEGRAM_BOT_TOKEN=' | head -1 | cut -d= -f2-)" >> $GITHUB_ENV
+          echo "TG_CHAT=$(echo "$ENV_FILE" | grep '^TELEGRAM_CHAT_ID=' | head -1 | cut -d= -f2-)" >> $GITHUB_ENV
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: ENV_FILE
+          script: |
+            set -euo pipefail
+            cd ~/takopi-claude-homelab
+            git pull
+            printf '%s' "$ENV_FILE" > .env
+            docker compose up --build -d
+            echo "Deploy complete"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
+            -d text="Deploy failed. Check: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d parse_mode=HTML
+
+      - name: Notify on success
+        if: success()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+            -d chat_id="${TG_CHAT}" \
+            -d text="Deploy OK (${{ github.sha }})" \
+            -d parse_mode=HTML

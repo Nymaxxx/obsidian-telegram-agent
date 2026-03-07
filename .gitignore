@@ -1,6 +1,4 @@
 .env
-sing-box/config.json
-sing-box/*.generated.json
 takopi-state/
 obsidian-state/
 .vscode/

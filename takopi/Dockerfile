@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.13-slim
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     nodejs \
     npm \
+    procps \
     tini \
   && rm -rf /var/lib/apt/lists/*
 
@@ -20,8 +21,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
   && /root/.local/bin/uv tool install -U takopi \
   && curl -fsSL https://claude.ai/install.sh | bash
 
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY --chmod=755 entrypoint.sh /entrypoint.sh
 
 WORKDIR /vault
 ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"]

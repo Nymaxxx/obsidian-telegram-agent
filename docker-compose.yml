@@ -1,30 +1,17 @@
 services:
-  sing-box:
-    image: ghcr.io/sagernet/sing-box:latest
-    container_name: sing-box
-    restart: unless-stopped
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun:/dev/net/tun
-    security_opt:
-      - no-new-privileges:true
-    volumes:
-      - ./sing-box:/etc/sing-box
-    environment:
-      TZ: "${TZ:-Europe/Amsterdam}"
-    command: -D /var/lib/sing-box -C /etc/sing-box run
-
   takopi:
     build:
       context: ./takopi
     container_name: takopi
     restart: unless-stopped
-    depends_on:
-      - sing-box
-    network_mode: "service:sing-box"
     stdin_open: true
     tty: true
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f takopi || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     environment:
       TZ: "${TZ:-Europe/Amsterdam}"
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"

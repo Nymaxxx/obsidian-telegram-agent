@@ -16,9 +16,9 @@ if [[ "${OBSIDIAN_AUTOSTART_SYNC:-false}" == "true" ]]; then
     echo "Obsidian Headless is installed but sync is not configured yet."
     echo "Run: docker compose exec obsidian-headless ob login"
     echo "Then: docker compose exec obsidian-headless ob sync-setup --vault \"<Vault Name>\" --path /vault"
-    exec tail -f /dev/null
+    exec sleep infinity
   fi
 fi
 
 echo "Obsidian Headless is idle. Set OBSIDIAN_AUTOSTART_SYNC=true after setup."
-exec tail -f /dev/null
+exec sleep infinity
