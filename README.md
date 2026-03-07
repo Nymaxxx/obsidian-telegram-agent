@@ -77,7 +77,7 @@ You need:
    │  │  └─ Short goals/
    │  └─ Общие заметки/
    ├─ 20 Resources/
-   ├─ 90 Archive/
+   ├─ 90 Archive/          ← hidden from takopi via tmpfs overlay
    └─ templates/
       └─ note.md
 ```
@@ -308,6 +308,20 @@ You can check health status with:
 
 ```bash
 docker inspect --format='{{.State.Health.Status}}' takopi
+```
+
+## Vault isolation
+
+`90 Archive/` is hidden from the `takopi` container at the Docker level. A tmpfs is mounted over `/vault/90 Archive` with `mode=0000`, so Claude physically cannot read, list, or write anything there — even if it ignores `AGENTS.md` instructions.
+
+Obsidian Headless still sees the full vault and syncs `90 Archive/` normally.
+
+To hide additional folders from the agent, add more entries under `tmpfs:` in `docker-compose.yml`:
+
+```yaml
+tmpfs:
+  - /vault/90 Archive:size=1k,mode=0000
+  - /vault/Some Other Folder:size=1k,mode=0000
 ```
 
 ## Recommended hardening and operational notes
