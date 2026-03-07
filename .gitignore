@@ -1,5 +1,9 @@
 .env
 takopi-state/
 obsidian-state/
+vault/.obsidian/
+vault/**/*.md
+!vault/CLAUDE.md
+!vault/templates/*.md
 .vscode/
 .DS_Store

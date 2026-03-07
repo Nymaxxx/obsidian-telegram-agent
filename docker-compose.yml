@@ -23,7 +23,7 @@ services:
       TAKOPI_MESSAGE_OVERFLOW: "${TAKOPI_MESSAGE_OVERFLOW:-split}"
       TAKOPI_TOPICS_ENABLED: "${TAKOPI_TOPICS_ENABLED:-false}"
       TAKOPI_TOPICS_SCOPE: "${TAKOPI_TOPICS_SCOPE:-auto}"
-      CLAUDE_MODEL: "${CLAUDE_MODEL:-claude-sonnet-4-5-20250929}"
+      CLAUDE_MODEL: "${CLAUDE_MODEL:-claude-sonnet-4-6}"
       CLAUDE_ALLOWED_TOOLS: '${CLAUDE_ALLOWED_TOOLS:-["Bash","Read","Edit","Write"]}'
       CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS: "${CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS:-false}"
       CLAUDE_USE_API_BILLING: "${CLAUDE_USE_API_BILLING:-false}"
@@ -36,6 +36,8 @@ services:
     volumes:
       - ./vault:/vault
       - ./takopi-state:/state
+    tmpfs:
+      - "/vault/90 Archive:size=1k,mode=0000"
 
   obsidian-headless:
     build:

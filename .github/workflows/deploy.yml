@@ -27,7 +27,7 @@ jobs:
           script: |
             set -euo pipefail
             cd ~/takopi-claude-homelab
-            git pull
+            git pull origin main
             printf '%s' "$ENV_FILE" > .env
             docker compose up --build -d
             echo "Deploy complete"

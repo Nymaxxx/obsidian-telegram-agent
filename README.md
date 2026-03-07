@@ -55,7 +55,6 @@ You need:
 │     └─ deploy.yml        ← auto-deploy on push to main
 ├─ docker-compose.yml
 ├─ .env.example
-├─ AGENTS.md
 ├─ README.md
 ├─ Makefile
 ├─ scripts/
@@ -68,9 +67,17 @@ You need:
 │  ├─ Dockerfile
 │  └─ entrypoint.sh
 └─ vault/
-   ├─ Inbox/
-   ├─ Daily/
-   ├─ Projects/
+   ├─ CLAUDE.md              ← agent instructions (read by Claude Code at /vault)
+   ├─ 00 Projects/
+   ├─ 10 Areas/
+   │  ├─ Inbox/
+   │  ├─ Todo/
+   │  │  ├─ Daily notes/
+   │  │  ├─ Long goals/
+   │  │  └─ Short goals/
+   │  └─ Общие заметки/
+   ├─ 20 Resources/
+   ├─ 90 Archive/          ← hidden from takopi via tmpfs overlay
    └─ templates/
       └─ note.md
 ```
@@ -164,13 +171,13 @@ docker compose up -d obsidian-headless
 Text:
 
 ```text
-создай заметку в Inbox с названием Идея про homelab
+создай заметку в 10 Areas/Inbox с названием Идея про homelab
 ```
 
 Or explicitly target the configured project:
 
 ```text
-/obsidian создай заметку в Inbox с названием Идея про homelab
+/obsidian создай заметку в 10 Areas/Inbox с названием Идея про homelab
 ```
 
 Voice notes also work if you enabled transcription.
@@ -236,7 +243,7 @@ If you want voice notes, also fill in either:
 
 | Path | Contents | Survives `git pull` |
 |---|---|---|
-| `./vault/` | Your Obsidian notes | Yes — gitignored content stays on disk |
+| `./vault/` | Your Obsidian notes | Yes — notes (`.md`) and `.obsidian/` are gitignored; `CLAUDE.md`, folder structure, and templates are tracked |
 | `./takopi-state/` | Claude auth token | Yes — gitignored |
 | `./obsidian-state/` | Obsidian Sync auth | Yes — gitignored |
 
@@ -261,10 +268,47 @@ That means you can talk to the bot in three main ways:
 Examples:
 
 ```text
-/claude суммаризируй папку Projects
-/obsidian создай заметку в Inbox с названием Встреча с юристом
-/obsidian перепиши заметку Projects/OSINT.md в более продуктовый стиль
+/claude суммаризируй папку 00 Projects
+/obsidian создай заметку в 10 Areas/Inbox с названием Встреча с юристом
+/obsidian перепиши заметку 00 Projects/OSINT mindset/OSINT.md в более продуктовый стиль
 ```
+
+## Sessions and conversation flow
+
+This stack uses `session_mode = "chat"`, which means Takopi **automatically resumes** the previous Claude session on every new message. You do not need to do anything special — just keep sending messages and Claude remembers the context.
+
+### How it works under the hood
+
+1. You send a message in Telegram.
+2. Takopi passes it to `claude -p "your message" --resume <session_id>`.
+3. Claude continues the previous conversation, remembering what it did before.
+4. Takopi streams Claude's response back to Telegram.
+
+The session ID is managed by Takopi internally — you never see or need it.
+
+### When to start a fresh session
+
+Send `/new` in the Telegram chat. This clears the stored session, and the next message starts a clean Claude conversation with no prior context.
+
+Use `/new` when:
+- Claude seems confused or stuck in a loop
+- You are switching to a completely unrelated task
+- The conversation has grown very long and responses are slow or expensive
+
+### Other useful commands
+
+| Command | What it does |
+|---------|-------------|
+| `/new` | Clear the session and start fresh |
+| `/cancel` | Reply to a progress message to stop the current run |
+| `/obsidian <message>` | Explicitly target the obsidian project |
+| `/claude <message>` | Explicitly target the Claude engine |
+
+### Things to keep in mind
+
+- **Context accumulates.** Every message adds to the conversation history. After many messages (50+), Claude's context window fills up, responses slow down, and token costs increase. Use `/new` periodically.
+- **`CLAUDE.md` is read once** at the start of each session. If you update `CLAUDE.md`, send `/new` to make Claude pick up the changes.
+- **One request at a time.** Takopi serializes requests per session — if you send two messages quickly, the second waits until the first finishes.
 
 ## Typical operations
 
@@ -303,13 +347,27 @@ You can check health status with:
 docker inspect --format='{{.State.Health.Status}}' takopi
 ```
 
+## Vault isolation
+
+`90 Archive/` is hidden from the `takopi` container at the Docker level. A tmpfs is mounted over `/vault/90 Archive` with `mode=0000`, so Claude physically cannot read, list, or write anything there — even if it ignores the `CLAUDE.md` rules.
+
+Obsidian Headless still sees the full vault and syncs `90 Archive/` normally.
+
+To hide additional folders from the agent, add more entries under `tmpfs:` in `docker-compose.yml`:
+
+```yaml
+tmpfs:
+  - "/vault/90 Archive:size=1k,mode=0000"
+  - "/vault/Some Other Folder:size=1k,mode=0000"
+```
+
 ## Recommended hardening and operational notes
 
 - **Never set `CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true` unless you fully understand the risks.** In this mode Claude can execute any command without confirmation. The containers run as root, so a careless allowed-tools list can cause damage beyond the vault.
 - Keep the allowed Claude tool set narrow.
 - Put the vault under git if you want an easy audit trail of agent edits.
 - Do not let the bot edit `.obsidian/` by default.
-- Start with `Inbox/`, `Daily/`, and `Projects/` only.
+- Start with the PARA folders defined in `CLAUDE.md`.
 - If you use a group chat, consider enabling Takopi trigger mode `mentions` after initial setup.
 
 ## What is not included yet
@@ -332,4 +390,4 @@ This repo is based on the current upstream behavior of:
 See these upstream docs when you adapt the stack:
 - Takopi: https://takopi.dev/
 - Obsidian Headless / Sync: https://help.obsidian.md/
-- Claude Code: https://docs.anthropic.com/ and https://code.claude.com/
+- Claude Code: https://docs.anthropic.com/en/docs/claude-code

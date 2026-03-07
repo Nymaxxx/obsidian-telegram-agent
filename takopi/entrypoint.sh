@@ -49,7 +49,7 @@ path = "/vault"
 default_engine = "${TAKOPI_DEFAULT_ENGINE:-claude}"
 
 [claude]
-model = "${CLAUDE_MODEL:-claude-sonnet-4-5-20250929}"
+model = "${CLAUDE_MODEL:-claude-sonnet-4-6}"
 allowed_tools = ${CLAUDE_ALLOWED_TOOLS:-["Bash","Read","Edit","Write"]}
 dangerously_skip_permissions = ${CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS:-false}
 use_api_billing = ${CLAUDE_USE_API_BILLING:-false}
