@@ -273,6 +273,43 @@ Examples:
 /obsidian перепиши заметку 00 Projects/OSINT mindset/OSINT.md в более продуктовый стиль
 ```
 
+## Sessions and conversation flow
+
+This stack uses `session_mode = "chat"`, which means Takopi **automatically resumes** the previous Claude session on every new message. You do not need to do anything special — just keep sending messages and Claude remembers the context.
+
+### How it works under the hood
+
+1. You send a message in Telegram.
+2. Takopi passes it to `claude -p "your message" --resume <session_id>`.
+3. Claude continues the previous conversation, remembering what it did before.
+4. Takopi streams Claude's response back to Telegram.
+
+The session ID is managed by Takopi internally — you never see or need it.
+
+### When to start a fresh session
+
+Send `/new` in the Telegram chat. This clears the stored session, and the next message starts a clean Claude conversation with no prior context.
+
+Use `/new` when:
+- Claude seems confused or stuck in a loop
+- You are switching to a completely unrelated task
+- The conversation has grown very long and responses are slow or expensive
+
+### Other useful commands
+
+| Command | What it does |
+|---------|-------------|
+| `/new` | Clear the session and start fresh |
+| `/cancel` | Reply to a progress message to stop the current run |
+| `/obsidian <message>` | Explicitly target the obsidian project |
+| `/claude <message>` | Explicitly target the Claude engine |
+
+### Things to keep in mind
+
+- **Context accumulates.** Every message adds to the conversation history. After many messages (50+), Claude's context window fills up, responses slow down, and token costs increase. Use `/new` periodically.
+- **`CLAUDE.md` is read once** at the start of each session. If you update `CLAUDE.md`, send `/new` to make Claude pick up the changes.
+- **One request at a time.** Takopi serializes requests per session — if you send two messages quickly, the second waits until the first finishes.
+
 ## Typical operations
 
 ### Follow logs
