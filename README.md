@@ -40,11 +40,60 @@ Telegram text / voice
 ## Prerequisites
 
 You need:
-- a Linux VPS with Docker and Docker Compose (any European VPS works fine)
+- a Linux VPS (see recommended specs below)
 - a Telegram bot token and the chat id where Takopi should listen
 - access to Claude Code (interactive login or Anthropic API key)
 - an Obsidian Sync subscription if you want server-side sync
 - optionally an OpenAI key or a local OpenAI-compatible Whisper endpoint for voice-note transcription
+
+### Recommended VPS specs
+
+The stack is lightweight — both containers idle most of the time and only consume resources when processing a message.
+
+| Parameter | Minimum | Comfortable |
+|---|---|---|
+| CPU | 1 vCPU | 2 vCPU |
+| RAM | 1 GB | 2 GB |
+| Disk | 10 GB SSD | 20 GB SSD |
+| OS | Ubuntu 22.04 LTS | Ubuntu 24.04 LTS |
+
+**OS choice:** Ubuntu LTS is the safest pick — widest Docker support, predictable update cycle, large community. Debian 12 is also fine. Avoid non-LTS releases and rolling distros (Arch, Fedora) on a server you don't want to babysit.
+
+**Region:** any region close to you works. If you care about Telegram latency, pick a European DC (Amsterdam, Frankfurt, Helsinki) — Telegram's servers are in Amsterdam and London.
+
+### VPS security basics
+
+After provisioning a fresh VPS, harden it before deploying the stack:
+
+```bash
+# 1. Update everything
+apt update && apt upgrade -y
+
+# 2. Create a non-root user and give it docker access
+adduser deploy
+usermod -aG sudo,docker deploy
+
+# 3. Disable root SSH login and password auth
+sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+systemctl restart sshd
+
+# 4. Enable the firewall — allow only SSH and outbound traffic
+ufw default deny incoming
+ufw default allow outgoing
+ufw allow OpenSSH
+ufw enable
+
+# 5. Enable automatic security updates
+apt install -y unattended-upgrades
+dpkg-reconfigure -plow unattended-upgrades
+```
+
+**Key points:**
+- SSH by key only, no root login, no password auth.
+- No inbound ports needed — the stack makes only outbound connections (Telegram API, Claude API, Obsidian Sync).
+- Keep the OS updated. `unattended-upgrades` handles security patches automatically.
+- If you use GitHub Actions deploy, the `deploy` user needs passwordless `sudo` for `docker compose`. Add `deploy ALL=(ALL) NOPASSWD: /usr/bin/docker` to `/etc/sudoers.d/deploy`.
 
 ## Repository layout
 
