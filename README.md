@@ -236,7 +236,7 @@ If you want voice notes, also fill in either:
 
 | Path | Contents | Survives `git pull` |
 |---|---|---|
-| `./vault/` | Your Obsidian notes | Yes — gitignored content stays on disk |
+| `./vault/` | Your Obsidian notes | Yes — notes (`.md`) and `.obsidian/` are gitignored; only folder structure and templates are tracked |
 | `./takopi-state/` | Claude auth token | Yes — gitignored |
 | `./obsidian-state/` | Obsidian Sync auth | Yes — gitignored |
 
@@ -332,4 +332,4 @@ This repo is based on the current upstream behavior of:
 See these upstream docs when you adapt the stack:
 - Takopi: https://takopi.dev/
 - Obsidian Headless / Sync: https://help.obsidian.md/
-- Claude Code: https://docs.anthropic.com/ and https://code.claude.com/
+- Claude Code: https://docs.anthropic.com/en/docs/claude-code

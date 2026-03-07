@@ -10,8 +10,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     curl \
     git \
-    nodejs \
-    npm \
     procps \
     tini \
   && rm -rf /var/lib/apt/lists/*
