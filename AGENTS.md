@@ -17,14 +17,17 @@ This repository is a local-first Obsidian vault controlled by Takopi from Telegr
 │   ├── Общие заметки/
 │   └── Планы на 2026/
 ├── 20 Resources/         ← reference material (AI Tools, Education, etc.)
-├── 90 Archive/           ← inactive notes and attachments
+├── 90 Archive/           ← OFF-LIMITS, do not access
 └── templates/
    └── note.md            ← template for new notes
 ```
 
+## Off-limits paths
+- `90 Archive/` — **never** read, write, list, or reference. Treat it as if it does not exist.
+- `.obsidian/` — never edit unless the user explicitly asks.
+
 ## Primary rules
 - Treat `/vault` as the source of truth.
-- Never edit `.obsidian/` unless the user explicitly asks.
 - New notes go to `10 Areas/Inbox/` by default, unless a destination folder is clearly specified.
 - Do not delete notes without an explicit user request.
 - Avoid renaming or moving notes unless the user explicitly asks.
