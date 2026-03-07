@@ -12,7 +12,7 @@ A homelab-ready stack for controlling an Obsidian vault from Telegram with text 
 - `docker-compose.yml`
 - a `takopi` image with Takopi + Claude Code CLI preinstalled
 - an `obsidian-headless` image with Obsidian Headless preinstalled
-- a starter vault layout
+- a starter vault with `CLAUDE.md` agent instructions and a note template
 - a GitHub Actions workflow for automatic deploys on every push to `main`
 - a README with the full bring-up flow
 
@@ -68,18 +68,8 @@ You need:
 │  └─ entrypoint.sh
 └─ vault/
    ├─ CLAUDE.md              ← agent instructions (read by Claude Code at /vault)
-   ├─ 00 Projects/
-   ├─ 10 Areas/
-   │  ├─ Inbox/
-   │  ├─ Todo/
-   │  │  ├─ Daily notes/
-   │  │  ├─ Long goals/
-   │  │  └─ Short goals/
-   │  └─ Общие заметки/
-   ├─ 20 Resources/
-   ├─ 90 Archive/          ← hidden from takopi via tmpfs overlay
    └─ templates/
-      └─ note.md
+      └─ note.md             ← template for new notes
 ```
 
 ## Quick start
@@ -243,7 +233,7 @@ If you want voice notes, also fill in either:
 
 | Path | Contents | Survives `git pull` |
 |---|---|---|
-| `./vault/` | Your Obsidian notes | Yes — notes (`.md`) and `.obsidian/` are gitignored; `CLAUDE.md`, folder structure, and templates are tracked |
+| `./vault/` | Your Obsidian notes | Yes — notes (`.md`) and `.obsidian/` are gitignored; only `CLAUDE.md` and `templates/` are tracked. Vault folders are created automatically by Obsidian Sync or Claude on first use |
 | `./takopi-state/` | Claude auth token | Yes — gitignored |
 | `./obsidian-state/` | Obsidian Sync auth | Yes — gitignored |
 
@@ -367,7 +357,7 @@ tmpfs:
 - Keep the allowed Claude tool set narrow.
 - Put the vault under git if you want an easy audit trail of agent edits.
 - Do not let the bot edit `.obsidian/` by default.
-- Start with the PARA folders defined in `CLAUDE.md`.
+- The PARA folder structure is defined in `CLAUDE.md` and created automatically on first use.
 - If you use a group chat, consider enabling Takopi trigger mode `mentions` after initial setup.
 
 ## What is not included yet
