@@ -36,6 +36,8 @@ services:
     volumes:
       - ./vault:/vault
       - ./takopi-state:/state
+    tmpfs:
+      - /vault/90 Archive:size=1k,mode=0000
 
   obsidian-headless:
     build:
