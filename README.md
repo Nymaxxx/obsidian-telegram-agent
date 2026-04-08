@@ -1,12 +1,12 @@
 # Obsidian Telegram Agent
 
-Self-hosted Telegram bot that turns your Obsidian vault into an AI-managed knowledge base using Claude Code.
+A Telegram bot that gives Claude Code read/write access to your Obsidian vault.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-You're reading an article on your phone and want to save it — just forward the link to Telegram. Walking and got an idea — send a voice note. Need to clean up old project notes — tell the bot in plain language. The agent handles capture, summarization, filing, and rewriting so you can stay in the flow instead of switching apps.
+Forward a link to save an article. Send a voice note on the go. Ask it to clean up old project notes. No app-switching, no copy-pasting — just message the bot.
 
-Under the hood, Claude Code runs as a full agent with shell access to your vault — not just an API wrapper. It can read, write, search, and refactor your notes the same way you would from a terminal. Obsidian Headless keeps the vault synced to your desktop and mobile apps through Obsidian Sync, so everything you capture through Telegram shows up in Obsidian within seconds.
+Claude Code runs as a full agent with shell access to your vault — not just an API wrapper. It can read, write, search, and refactor your notes the same way you would from a terminal. Obsidian Headless keeps the vault synced to your desktop and mobile apps through Obsidian Sync, so everything you capture through Telegram shows up in Obsidian within seconds.
 
 ## Table of contents
 
@@ -77,7 +77,7 @@ The agent remembers context between messages — you can have a back-and-forth c
 
 ### Recommended VPS specs
 
-The stack is lightweight — both containers idle most of the time and only consume resources when processing a message.
+Both containers idle at near-zero when not processing a message, so even a cheap VPS handles this fine.
 
 | Parameter | Minimum | Comfortable |
 |---|---|---|
@@ -140,7 +140,7 @@ After this, set `OBSIDIAN_AUTOSTART_SYNC=true` in `.env` and restart:
 docker compose up -d
 ```
 
-From that point on, sync runs continuously and automatically on every container start.
+Sync will start automatically on every restart from now on.
 
 ### 5. Test the bot
 
@@ -194,7 +194,7 @@ The agent's behavior is defined in [`vault/CLAUDE.md`](vault/CLAUDE.md). This fi
 - **Capture rules** — where new notes go by default
 - **Off-limits paths** — folders the agent must never touch
 
-Edit `CLAUDE.md` to match your vault structure and preferences. After editing, send `/new` in Telegram to start a fresh session that picks up the changes.
+The included `CLAUDE.md` reflects how the author personally uses the vault. Edit it to match your own folder structure, language, and preferences — the agent will follow whatever rules you put there. After editing, send `/new` in Telegram to start a fresh session that picks up the changes.
 
 ### Choosing a model
 
@@ -202,9 +202,9 @@ Sonnet is powerful but expensive. For everyday vault tasks (capturing notes, mov
 
 ## Sessions and conversation flow
 
-This stack uses `session_mode = "chat"`, which means the bot **automatically resumes** the previous Claude session on every new message. You do not need to do anything special — just keep sending messages and Claude remembers the context.
+This stack uses `session_mode = "chat"` — the bot automatically resumes the previous Claude session on every new message. Just keep sending messages, no special commands needed.
 
-### How it works under the hood
+### Message flow
 
 1. You send a message in Telegram.
 2. Takopi passes it to `claude -p "your message" --resume <session_id>`.
@@ -226,7 +226,7 @@ This stack uses `session_mode = "chat"`, which means the bot **automatically res
 
 ## Vault isolation
 
-There are two layers of protection for hiding folders from the agent:
+Two ways to hide folders from the agent:
 
 **1. Soft (CLAUDE.md instruction):** list the folder in the `Off-limits paths` section of `vault/CLAUDE.md`. Claude will treat it as if it doesn't exist. Easy to add, but relies on the model following instructions.
 
@@ -239,9 +239,7 @@ tmpfs:
   - "/vault/My Private Folder:size=1k,mode=0000"
 ```
 
-`90 Archive/` already uses both layers by default. Obsidian Headless is unaffected and syncs those folders normally.
-
-For maximum safety, use both layers together.
+`90 Archive/` already uses both layers by default. Obsidian Headless is unaffected and syncs those folders normally. Use both together if the folder contains anything sensitive.
 
 ## Auto-deploy with GitHub Actions
 
@@ -335,7 +333,7 @@ git commit --allow-empty -m "redeploy" && git push
 
 ## Cost estimate
 
-This stack uses paid services. Here is a rough monthly estimate for light personal use (~10-20 messages/day):
+Rough monthly estimate for light personal use (~10-20 messages/day):
 
 | Service | Cost | Notes |
 |---|---|---|
@@ -347,16 +345,16 @@ This stack uses paid services. Here is a rough monthly estimate for light person
 | **Total (budget)** | **~$9-15/mo** | Haiku + Obsidian Sync |
 | **Total (power user)** | **~$15-40/mo** | Sonnet + heavy usage |
 
-You can bring the cost down by using `claude-haiku-4-5` for everyday tasks and only switching to Sonnet when you need complex reasoning.
+Haiku covers 90% of vault tasks. Switch to Sonnet only when you actually need it.
 
 ## Security notes
 
-- Both containers run as root. This is intentional — Takopi and Claude Code CLI install into `/root/.local/bin` and expect a writable home directory. The containers are single-purpose, have no inbound ports, and only make outbound connections (Telegram API, Claude API, Obsidian Sync). The vault volume is the only shared surface.
+- Both containers run as root. Takopi and Claude Code CLI install into `/root/.local/bin` and expect a writable home directory. The containers are single-purpose, have no inbound ports, and only make outbound connections (Telegram API, Claude API, Obsidian Sync). The vault volume is the only shared surface.
 - The `curl | bash` pattern is used for installing Claude Code CLI. This is the [official install method](https://docs.anthropic.com/en/docs/claude-code). If this concerns you, review the install script before building.
 - Dependencies are pinned to specific versions in the Dockerfiles to prevent unexpected breakage.
-- Do not set `CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true` unless you fully understand the risks. In this mode Claude can execute any command without confirmation.
-- Keep the `CLAUDE_ALLOWED_TOOLS` list narrow.
-- Do not let the agent edit `.obsidian/` configuration — this is blocked by default in `CLAUDE.md`.
+- Don't set `CLAUDE_DANGEROUSLY_SKIP_PERMISSIONS=true` unless you know what you're doing — in that mode Claude runs commands without confirmation.
+- Keep `CLAUDE_ALLOWED_TOOLS` narrow.
+- Don't let the agent touch `.obsidian/` — blocked by default in `CLAUDE.md`, leave it that way.
 
 <details>
 <summary><strong>VPS hardening checklist</strong></summary>
@@ -369,7 +367,7 @@ After provisioning a fresh VPS:
 4. Enable automatic security updates: `apt install -y unattended-upgrades`
 5. If using GitHub Actions deploy, add `deploy ALL=(ALL) NOPASSWD: /usr/bin/docker` to `/etc/sudoers.d/deploy`
 
-No inbound ports are needed — the stack makes only outbound connections.
+No inbound ports needed.
 
 </details>
 
@@ -383,11 +381,9 @@ No inbound ports are needed — the stack makes only outbound connections.
 
 ## Acknowledgments
 
-This project would not exist without:
-
-- [**Takopi**](https://takopi.dev/) by [banteg](https://github.com/banteg) — the Telegram-to-agent bridge that powers the entire chat interface. Takopi handles session management, message routing, voice transcription, and streaming — all the hard parts of making a coding agent accessible from a phone.
-- [**Obsidian Headless**](https://help.obsidian.md/) by the Obsidian team — the official headless Sync client that makes server-side vault synchronization possible without running a GUI.
-- [**Claude Code**](https://docs.anthropic.com/en/docs/claude-code) by Anthropic — the AI agent CLI that does the actual reading, writing, and reasoning over the vault.
+- [**Takopi**](https://takopi.dev/) by [banteg](https://github.com/banteg) — Telegram-to-agent bridge
+- [**Obsidian Headless**](https://help.obsidian.md/) by the Obsidian team — headless Sync client
+- [**Claude Code**](https://docs.anthropic.com/en/docs/claude-code) by Anthropic — agent CLI
 
 ## License
 
