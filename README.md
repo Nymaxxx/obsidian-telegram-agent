@@ -65,7 +65,7 @@ Both services run as Docker containers sharing a single `/vault` volume.
 - **Organize** — move notes between folders, add tags, update frontmatter, clean up stale content
 - **Anything else** — Claude Code has full shell access to the vault, so if you can describe it, it can probably do it
 
-The agent remembers context between messages — you can have a back-and-forth conversation about your notes without re-explaining what you're working on.
+Context carries over between messages, so you can have a back-and-forth conversation without re-explaining what you're working on.
 
 ## Prerequisites
 
@@ -86,7 +86,7 @@ Both containers idle at near-zero when not processing a message, so even a cheap
 | Disk | 10 GB SSD | 20 GB SSD |
 | OS | Ubuntu 22.04 LTS | Ubuntu 24.04 LTS |
 
-Any VPS provider works (Hetzner, DigitalOcean, Vultr, etc). For best Telegram latency, pick a European DC — Telegram servers are in Amsterdam and London.
+Any VPS provider works (Hetzner, DigitalOcean, Vultr, etc). For best Telegram latency, pick a European DC (Telegram servers are in Amsterdam and London).
 
 ## Quick start
 
@@ -194,7 +194,7 @@ The agent's behavior is defined in [`vault/CLAUDE.md`](vault/CLAUDE.md). This fi
 - **Capture rules** — where new notes go by default
 - **Off-limits paths** — folders the agent must never touch
 
-The included `CLAUDE.md` reflects how the author personally uses the vault. Edit it to match your own folder structure, language, and preferences — the agent will follow whatever rules you put there. After editing, send `/new` in Telegram to start a fresh session that picks up the changes.
+The included `CLAUDE.md` reflects how the author personally uses the vault. Edit it to match your own folder structure, language, and preferences. The agent will follow whatever rules you put there. After editing, send `/new` in Telegram to start a fresh session that picks up the changes.
 
 ### Choosing a model
 
@@ -202,7 +202,7 @@ Sonnet is powerful but expensive. For everyday vault tasks (capturing notes, mov
 
 ## Sessions and conversation flow
 
-This stack uses `session_mode = "chat"` — the bot automatically resumes the previous Claude session on every new message. Just keep sending messages, no special commands needed.
+This stack uses `session_mode = "chat"`: the bot automatically resumes the previous Claude session on every new message. Just keep sending messages, no special commands needed.
 
 ### Message flow
 
@@ -222,7 +222,7 @@ This stack uses `session_mode = "chat"` — the bot automatically resumes the pr
 
 - **Context accumulates.** Every message adds to the conversation history. After many messages, Claude's context window fills up, responses slow down, and token costs increase. Use `/new` periodically.
 - **`CLAUDE.md` is read once** at the start of each session. If you update `CLAUDE.md`, send `/new` to make Claude pick up the changes.
-- **One request at a time.** Takopi serializes requests per session — if you send two messages quickly, the second waits until the first finishes.
+- **One request at a time.** Takopi serializes requests per session: if you send two messages quickly, the second waits until the first finishes.
 
 ## Vault isolation
 
