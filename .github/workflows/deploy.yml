@@ -1,0 +1,85 @@
+name: Deploy
+
+# Required secrets:
+#   VPS_HOST             — IP or hostname of the VPS
+#   VPS_USER             — SSH username
+#   VPS_SSH_KEY          — SSH private key
+#   TELEGRAM_BOT_TOKEN   — Telegram bot token
+#   TELEGRAM_CHAT_ID     — Telegram chat ID for notifications
+#   ANTHROPIC_API_KEY    — Anthropic API key for Claude
+#
+# Optional secrets (omit to use docker-compose defaults):
+#   TZ                           — Timezone (default: Europe/Amsterdam)
+#   OBSIDIAN_AUTOSTART_SYNC      — true/false, enable continuous Obsidian Sync (default: false)
+#   CLAUDE_MODEL                 — Claude model to use (default: claude-sonnet-4-6)
+#   VOICE_TRANSCRIPTION_ENABLED  — true/false, enable voice note transcription (default: false)
+#   OPENAI_API_KEY               — OpenAI key for voice transcription
+#   VOICE_TRANSCRIPTION_API_KEY  — API key if using a custom transcription provider
+#   VOICE_TRANSCRIPTION_BASE_URL — Base URL for custom transcription provider
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  DEPLOY_DIR: obsidian-telegram-agent
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: DEPLOY_DIR
+          script: |
+            set -euo pipefail
+            DEPLOY_DIR="${DEPLOY_DIR:-obsidian-telegram-agent}"
+            if [ -d ~/"$DEPLOY_DIR" ]; then
+              cd ~/"$DEPLOY_DIR" && git fetch origin && git reset --hard origin/main
+            else
+              git clone https://github.com/${{ github.repository }}.git ~/"$DEPLOY_DIR"
+              cd ~/"$DEPLOY_DIR"
+            fi
+
+            cat > .env <<'EOF'
+TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
+ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
+CLAUDE_USE_API_BILLING=true
+TZ=${{ secrets.TZ || 'Europe/Amsterdam' }}
+OBSIDIAN_AUTOSTART_SYNC=${{ secrets.OBSIDIAN_AUTOSTART_SYNC || 'false' }}
+VOICE_TRANSCRIPTION_ENABLED=${{ secrets.VOICE_TRANSCRIPTION_ENABLED || 'false' }}
+CLAUDE_MODEL=${{ secrets.CLAUDE_MODEL || 'claude-sonnet-4-6' }}
+EOF
+
+            # Optional secrets — only written if set
+            [ -n '${{ secrets.OPENAI_API_KEY }}' ] && \
+              echo 'OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}' >> .env || true
+            [ -n '${{ secrets.VOICE_TRANSCRIPTION_API_KEY }}' ] && \
+              echo 'VOICE_TRANSCRIPTION_API_KEY=${{ secrets.VOICE_TRANSCRIPTION_API_KEY }}' >> .env || true
+            [ -n '${{ secrets.VOICE_TRANSCRIPTION_BASE_URL }}' ] && \
+              echo 'VOICE_TRANSCRIPTION_BASE_URL=${{ secrets.VOICE_TRANSCRIPTION_BASE_URL }}' >> .env || true
+
+            docker compose up --build -d
+            echo "Deploy complete"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="Deploy failed. Check: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d parse_mode=HTML
+
+      - name: Notify on success
+        if: success()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="Deploy OK (${{ github.sha }})" \
+            -d parse_mode=HTML

@@ -1,0 +1,53 @@
+services:
+  takopi:
+    build:
+      context: ./takopi
+    container_name: takopi
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -f takopi || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    environment:
+      TZ: "${TZ:-Europe/Amsterdam}"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID}"
+      TAKOPI_DEFAULT_ENGINE: "${TAKOPI_DEFAULT_ENGINE:-claude}"
+      TAKOPI_DEFAULT_PROJECT: "${TAKOPI_DEFAULT_PROJECT:-obsidian}"
+      TAKOPI_SESSION_MODE: "${TAKOPI_SESSION_MODE:-chat}"
+      TAKOPI_SHOW_RESUME_LINE: "${TAKOPI_SHOW_RESUME_LINE:-true}"
+      TAKOPI_MESSAGE_OVERFLOW: "${TAKOPI_MESSAGE_OVERFLOW:-split}"
+      TAKOPI_TOPICS_ENABLED: "${TAKOPI_TOPICS_ENABLED:-false}"
+      TAKOPI_TOPICS_SCOPE: "${TAKOPI_TOPICS_SCOPE:-auto}"
+      CLAUDE_MODEL: "${CLAUDE_MODEL:-claude-sonnet-4-6}"
+      CLAUDE_ALLOWED_TOOLS: '${CLAUDE_ALLOWED_TOOLS:-["Bash","Read","Edit","Write"]}'
+      CLAUDE_USE_API_BILLING: "${CLAUDE_USE_API_BILLING:-false}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      VOICE_TRANSCRIPTION_ENABLED: "${VOICE_TRANSCRIPTION_ENABLED:-false}"
+      VOICE_TRANSCRIPTION_MODEL: "${VOICE_TRANSCRIPTION_MODEL:-gpt-4o-mini-transcribe}"
+      VOICE_TRANSCRIPTION_BASE_URL: "${VOICE_TRANSCRIPTION_BASE_URL:-}"
+      VOICE_TRANSCRIPTION_API_KEY: "${VOICE_TRANSCRIPTION_API_KEY:-}"
+    volumes:
+      - ./vault:/vault
+      - ./takopi-state:/state
+    tmpfs:
+      - "/vault/90 Archive:size=1k,mode=0000"
+
+  obsidian-headless:
+    build:
+      context: ./obsidian-headless
+    container_name: obsidian-headless
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    environment:
+      TZ: "${TZ:-Europe/Amsterdam}"
+      OBSIDIAN_AUTOSTART_SYNC: "${OBSIDIAN_AUTOSTART_SYNC:-false}"
+    volumes:
+      - ./vault:/vault
+      - ./obsidian-state:/state
