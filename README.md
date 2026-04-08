@@ -26,18 +26,27 @@ Under the hood, Claude Code runs as a full agent with shell access to your vault
 
 ## How it works
 
-```text
-Telegram (text / voice)
-        |
-        v
-      Takopi  ──>  Claude Code CLI  ──>  /vault (shared volume)
-        |                                     |
-        v                                     v
-   transcription                     Obsidian Headless
-   (Whisper API)                          |
-                                     Obsidian Sync
-                                          |
-                                  desktop / mobile apps
+```mermaid
+flowchart LR
+    User["You (phone / desktop)"]
+    TG["Telegram"]
+    Takopi
+    Whisper["Whisper API"]
+    Claude["Claude Code CLI"]
+    Vault["/vault"]
+    OH["Obsidian Headless"]
+    Sync["Obsidian Sync"]
+    Apps["Obsidian\ndesktop / mobile"]
+
+    User -- "text / voice" --> TG
+    TG --> Takopi
+    Takopi -. "voice notes" .-> Whisper
+    Whisper -. "transcript" .-> Takopi
+    Takopi --> Claude
+    Claude -- "read / write" --> Vault
+    Vault --> OH
+    OH -- "sync" --> Sync
+    Sync --> Apps
 ```
 
 **Takopi** is a [Telegram bridge for coding agents](https://takopi.dev/). It handles chat routing, session management, and voice-note transcription. Under the hood it shells out to Claude Code CLI, which has direct read/write access to the vault.
@@ -330,7 +339,7 @@ This stack uses paid services. Here is a rough monthly estimate for light person
 
 | Service | Cost | Notes |
 |---|---|---|
-| VPS | $4-6/mo | Hetzner CX22, DigitalOcean Basic |
+| VPS | $4-6/mo | Any cheap VPS with 1 vCPU / 1 GB RAM |
 | Anthropic API (Haiku) | $1-5/mo | Depends on usage volume |
 | Anthropic API (Sonnet) | $5-30/mo | More capable but significantly more expensive |
 | Obsidian Sync | $4/mo (billed annually) | Optional; skip if using Git sync |

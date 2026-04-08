@@ -46,16 +46,16 @@ jobs:
               cd ~/"$DEPLOY_DIR"
             fi
 
-            cat > .env <<'EOF'
-TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}
-ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
-CLAUDE_USE_API_BILLING=true
-TZ=${{ secrets.TZ || 'Europe/Amsterdam' }}
-OBSIDIAN_AUTOSTART_SYNC=${{ secrets.OBSIDIAN_AUTOSTART_SYNC || 'false' }}
-VOICE_TRANSCRIPTION_ENABLED=${{ secrets.VOICE_TRANSCRIPTION_ENABLED || 'false' }}
-CLAUDE_MODEL=${{ secrets.CLAUDE_MODEL || 'claude-sonnet-4-6' }}
-EOF
+            {
+              echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}"
+              echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}"
+              echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}"
+              echo "CLAUDE_USE_API_BILLING=true"
+              echo "TZ=${{ secrets.TZ || 'Europe/Amsterdam' }}"
+              echo "OBSIDIAN_AUTOSTART_SYNC=${{ secrets.OBSIDIAN_AUTOSTART_SYNC || 'false' }}"
+              echo "VOICE_TRANSCRIPTION_ENABLED=${{ secrets.VOICE_TRANSCRIPTION_ENABLED || 'false' }}"
+              echo "CLAUDE_MODEL=${{ secrets.CLAUDE_MODEL || 'claude-sonnet-4-6' }}"
+            } > .env
 
             # Optional secrets — only written if set
             [ -n '${{ secrets.OPENAI_API_KEY }}' ] && \
