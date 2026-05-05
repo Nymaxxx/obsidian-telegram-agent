@@ -18,7 +18,7 @@ Thanks for your interest in contributing!
 ## Local development
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/obsidian-telegram-agent.git
+git clone https://github.com/nymaxxx/obsidian-telegram-agent.git
 cd obsidian-telegram-agent
 cp .env.example .env
 # Fill in your API keys in .env

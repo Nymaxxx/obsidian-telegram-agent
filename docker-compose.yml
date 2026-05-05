@@ -4,10 +4,16 @@ services:
       context: ./takopi
     container_name: takopi
     restart: unless-stopped
-    stdin_open: true
-    tty: true
+    mem_limit: 768m
+    memswap_limit: 768m
+    cpus: 1.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f takopi || exit 1"]
+      test: ["CMD-SHELL", "pgrep -f takopi"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -24,8 +30,9 @@ services:
       TAKOPI_TOPICS_ENABLED: "${TAKOPI_TOPICS_ENABLED:-false}"
       TAKOPI_TOPICS_SCOPE: "${TAKOPI_TOPICS_SCOPE:-auto}"
       CLAUDE_MODEL: "${CLAUDE_MODEL:-claude-sonnet-4-6}"
-      CLAUDE_ALLOWED_TOOLS: '${CLAUDE_ALLOWED_TOOLS:-["Bash","Read","Edit","Write"]}'
-      CLAUDE_USE_API_BILLING: "${CLAUDE_USE_API_BILLING:-false}"
+      CLAUDE_ALLOWED_TOOLS: '${CLAUDE_ALLOWED_TOOLS:-["Bash","Read","Edit","Write","Glob","Grep","LS","WebFetch"]}'
+      CLAUDE_DENIED_COMMANDS: '${CLAUDE_DENIED_COMMANDS:-["Bash(rm *)","Bash(rmdir *)","Bash(chmod *)","Bash(chown *)","Bash(dd *)","Bash(mkfs *)","Bash(shred *)","Bash(sudo *)"]}'
+      CLAUDE_USE_API_BILLING: "${CLAUDE_USE_API_BILLING:-true}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
       VOICE_TRANSCRIPTION_ENABLED: "${VOICE_TRANSCRIPTION_ENABLED:-false}"
@@ -45,6 +52,29 @@ services:
     restart: unless-stopped
     stdin_open: true
     tty: true
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      # $${VAR} (not ${VAR}) so the env var is read inside the container
+      # at runtime, not pre-substituted by docker compose at parse time.
+      test:
+        - CMD-SHELL
+        - |
+          if [ "$${OBSIDIAN_AUTOSTART_SYNC:-false}" = "true" ]; then
+            pgrep -f 'ob sync' >/dev/null
+          else
+            exit 0
+          fi
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     environment:
       TZ: "${TZ:-Europe/Amsterdam}"
       OBSIDIAN_AUTOSTART_SYNC: "${OBSIDIAN_AUTOSTART_SYNC:-false}"

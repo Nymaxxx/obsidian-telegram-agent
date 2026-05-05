@@ -32,6 +32,18 @@ echo "  Obsidian Telegram Agent — Setup Wizard"
 echo "============================================="
 echo ""
 
+warn "This bot gives Claude shell-level read/write/delete access to your vault."
+warn "An LLM can misinterpret instructions and damage or delete notes."
+warn "Make sure you have an independent backup before pointing it at a vault you care about."
+warn "See the 'Backups' section in the README for recommended approaches."
+echo ""
+read -rp "$(echo -e "${CYAN}Acknowledge and continue?${NC} [y/N]: ")" ack
+if [[ "${ack,,}" != "y" ]]; then
+  info "Aborted. Set up backups first, then re-run."
+  exit 0
+fi
+echo ""
+
 # --- Check Docker ---
 if ! command -v docker &>/dev/null; then
   warn "Docker is not installed."

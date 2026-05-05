@@ -12,6 +12,8 @@ name: Deploy
 #   TZ                           — Timezone (default: Europe/Amsterdam)
 #   OBSIDIAN_AUTOSTART_SYNC      — true/false, enable continuous Obsidian Sync (default: false)
 #   CLAUDE_MODEL                 — Claude model to use (default: claude-sonnet-4-6)
+#   CLAUDE_ALLOWED_TOOLS         — JSON array of tools Claude may call
+#   CLAUDE_DENIED_COMMANDS       — JSON array of Bash patterns hard-blocked via ~/.claude/settings.json
 #   VOICE_TRANSCRIPTION_ENABLED  — true/false, enable voice note transcription (default: false)
 #   OPENAI_API_KEY               — OpenAI key for voice transcription
 #   VOICE_TRANSCRIPTION_API_KEY  — API key if using a custom transcription provider
@@ -64,8 +66,13 @@ jobs:
               echo 'VOICE_TRANSCRIPTION_API_KEY=${{ secrets.VOICE_TRANSCRIPTION_API_KEY }}' >> .env || true
             [ -n '${{ secrets.VOICE_TRANSCRIPTION_BASE_URL }}' ] && \
               echo 'VOICE_TRANSCRIPTION_BASE_URL=${{ secrets.VOICE_TRANSCRIPTION_BASE_URL }}' >> .env || true
+            [ -n '${{ secrets.CLAUDE_ALLOWED_TOOLS }}' ] && \
+              echo 'CLAUDE_ALLOWED_TOOLS=${{ secrets.CLAUDE_ALLOWED_TOOLS }}' >> .env || true
+            [ -n '${{ secrets.CLAUDE_DENIED_COMMANDS }}' ] && \
+              echo 'CLAUDE_DENIED_COMMANDS=${{ secrets.CLAUDE_DENIED_COMMANDS }}' >> .env || true
 
             docker compose up --build -d
+            docker image prune -f
             echo "Deploy complete"
 
       - name: Notify on failure

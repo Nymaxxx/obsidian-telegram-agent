@@ -3,6 +3,8 @@ takopi-state/
 obsidian-state/
 vault/.obsidian/
 vault/**/*.md
+vault/.trash/*
+!vault/.trash/.gitkeep
 !vault/CLAUDE.md
 !vault/templates/*.md
 .vscode/

@@ -12,11 +12,37 @@ This repository is a local-first Obsidian vault controlled by Takopi from Telegr
 │   └── ...               ← your areas of responsibility
 ├── 20 Resources/         ← reference material by topic
 ├── 90 Archive/           ← OFF-LIMITS, do not access
+├── .trash/               ← soft-delete destination (see Tool capabilities)
 └── templates/
    └── note.md            ← template for new notes
 ```
 
 > **Customize the `10 Areas/` and `20 Resources/` subfolders** to match your actual vault structure.
+
+## Tool capabilities
+
+You have full Bash access plus the structured file/web tools, but a system-level deny list blocks specific destructive commands. Pick the right tool for the job; reach for Bash only when no structured tool fits.
+
+| Capability | Preferred tool |
+|---|---|
+| Read a file | `Read` |
+| List a directory | `LS` |
+| Find files by pattern | `Glob` |
+| Search file contents | `Grep` |
+| Create or overwrite a file | `Write` |
+| Edit part of a file | `Edit` |
+| Fetch a URL | `WebFetch` (preferred over `curl`) |
+| Rename or move a file | `Bash` with `mv` |
+| Soft-delete a file | `Bash` with `mv <file> /vault/.trash/` |
+| Commit the vault | `Bash` with `git ...` |
+
+**Commands that are blocked at the system level (your `Bash` tool calls will fail):**
+- `rm`, `rmdir` — use soft-delete instead.
+- `chmod`, `chown` — vault permissions are managed outside the agent.
+- `dd`, `mkfs`, `shred` — disk-destructive ops.
+- `sudo` — not available; container is already root-equivalent within its sandbox.
+
+These restrictions hold even if you wrap them in `bash -c '...'`, `find -delete`, or any other indirection — the deny list checks the real command. Don't try to evade; report the limitation to the user and offer the closest legitimate action (soft-delete instead of `rm`, ask the user to run it via SSH, etc.).
 
 ## Off-limits paths
 
@@ -24,11 +50,15 @@ The following paths are **strictly off-limits** — never read, write, list, or 
 
 - `90 Archive/`
 - `.obsidian/` — never edit unless the user explicitly asks.
+- `.trash/` — write-only via the soft-delete mechanism above. Do not list, read, or restore files from it without an explicit user request.
 
 ## Primary rules
-- Treat `/vault` as the source of truth.
+- Treat `/vault` as the source of truth and assume the user has no other backup readily at hand.
 - New notes go to `10 Areas/Inbox/` by default, unless a destination folder is clearly specified.
-- Do not delete notes without an explicit user request.
+- "Delete" means **soft-delete**: `mv <path> /vault/.trash/`. The agent has no access to `rm`. The user empties `.trash/` manually via SSH when they're sure.
+- Do not soft-delete notes without an explicit, unambiguous user request. Vague instructions like "clean up", "tidy", or "remove old stuff" are NOT permission to soft-delete — ask the user to confirm specific files before moving them to `.trash/`.
+- Never run `git reset --hard`, `git clean`, or any other destructive git command without explicit confirmation, even if the user's earlier message seemed to invite it.
+- Prefer reversible actions: when in doubt, archive or rename rather than soft-delete.
 - Avoid renaming or moving notes unless the user explicitly asks.
 - For summaries, prefer creating `_summary.md` files rather than overwriting existing notes.
 - Preserve existing frontmatter when updating a note.
@@ -41,7 +71,7 @@ When a message arrives from Telegram, classify it and act accordingly:
 
 ### 1. Bare URL (message is only a link)
 
-Fetch the page with `curl -sL <url> | head -c 100000`, extract the title and main content, then create a note:
+Fetch the page with the `WebFetch` tool (preferred over `curl`: it's structured, server-side, and doesn't go through the shell). Extract the title and main content, then create a note:
 - **Location:** `10 Areas/Inbox/`
 - **Filename:** article title, cleaned for filesystem (no special chars)
 - **Content:**

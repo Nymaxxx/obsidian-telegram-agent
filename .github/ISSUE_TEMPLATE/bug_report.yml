@@ -1,0 +1,73 @@
+name: Bug report
+description: Something is broken or behaving unexpectedly.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill out the fields below to help reproduce and diagnose the issue.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear, concise description of the bug.
+      placeholder: When I send a voice note, the bot replies with "transcription failed"…
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps so we can replicate it.
+      placeholder: |
+        1. Send a voice note in Telegram
+        2. Wait for the reply
+        3. See "transcription failed" in the chat
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Output of `docker compose logs --tail=200 takopi` (and `obsidian-headless` if relevant). Redact tokens and chat IDs.
+      render: shell
+
+  - type: input
+    id: model
+    attributes:
+      label: Claude model
+      placeholder: claude-sonnet-4-6
+
+  - type: input
+    id: host
+    attributes:
+      label: Host OS / VPS
+      placeholder: Ubuntu 24.04 on Hetzner CX22
+
+  - type: input
+    id: commit
+    attributes:
+      label: Commit / version
+      description: Output of `git rev-parse --short HEAD`
+      placeholder: e90711f
+
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Pre-flight checks
+      options:
+        - label: I searched existing issues and didn't find a duplicate.
+          required: true
+        - label: I redacted any tokens, API keys, or personal data from logs.
+          required: true

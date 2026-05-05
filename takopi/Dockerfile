@@ -16,10 +16,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # a writable HOME for config/state. Running as root inside the container is
 # intentional — the container is single-purpose and network-isolated (no
 # inbound ports). The vault is the only shared surface, mounted as a volume.
+#
+# Pinned versions: bump these deliberately so a Claude Code or Takopi
+# upstream release can't silently change behavior in production.
+ARG TAKOPI_VERSION=0.22.3
+ARG CLAUDE_CODE_VERSION=2.1.128
 WORKDIR /tmp
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-  && /root/.local/bin/uv tool install takopi==0.22.3 \
-  && curl -fsSL https://claude.ai/install.sh | bash \
+  && /root/.local/bin/uv tool install "takopi==${TAKOPI_VERSION}" \
+  && curl -fsSL https://claude.ai/install.sh | bash -s -- "${CLAUDE_CODE_VERSION}" \
   && echo 'export PATH="/root/.local/bin:$PATH"' > /etc/profile.d/local-bin.sh
 
 ENV PATH="/root/.local/bin:${PATH}" \
