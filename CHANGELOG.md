@@ -156,6 +156,46 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   commands in the README work as written.
 - Replaced `YOUR_USERNAME` placeholders in `README.md` and `CONTRIBUTING.md`
   with the actual repository path.
+- **`scripts/install.sh` now persists every documented optional env
+  var** to `.env` (`IMAGE_TAG`, `TAKOPI_SHOW_RESUME_LINE`,
+  `TAKOPI_TOPICS_*`, `VOICE_TRANSCRIPTION_MODEL/_BASE_URL/_API_KEY`,
+  `CLAUDE_ALLOWED_TOOLS`, `CLAUDE_DENIED_COMMANDS`, …). Previously a
+  caller could pass e.g. `IMAGE_TAG=v0.3.0` for the first deploy but
+  the value silently dropped on the next `docker compose` invocation
+  because the wizard never wrote it to `.env`.
+- **`scripts/bootstrap.sh` always prints the commit SHA** after clone
+  or pull, and prints a multi-line banner when `git pull --ff-only`
+  fails so a stale-checkout deploy is no longer silent.
+- **`takopi/entrypoint.sh` validates `CLAUDE_ALLOWED_TOOLS` and
+  `CLAUDE_DENIED_COMMANDS`** as JSON arrays before writing
+  `~/.claude/settings.json`, so a typo in the operator's `.env` now
+  fails fast with a clear error instead of putting the container into
+  a restart loop on cryptic JSON parse errors.
+- **`takopi/entrypoint.sh` chat-id loader requires a non-empty file**
+  (`-s` instead of `-f`) and self-heals an empty `chat_id` left over
+  from a container killed mid-write.
+- **Healthcheck for `takopi` matches the binary path
+  (`/root/.local/bin/takopi`)** instead of the substring `takopi`, so
+  the entrypoint script itself can't false-positive while the /claim
+  flow is waiting.
+
+### Changed
+- **Default deny list extended** with `Bash(find * -delete)`,
+  `Bash(find * -exec rm *)`, and `Bash(truncate *)` to cover the most
+  common bulk-deletion shortcuts that pattern-matching on `rm` alone
+  would miss. README and `vault/CLAUDE.md` now describe the deny list
+  as a guard rail rather than a complete sandbox, and explicitly call
+  out that scripted-language evasions (`python -c '...os.remove...'`)
+  remain in scope — backups stay mandatory. Supersedes the earlier
+  "resilient to evasion via `bash -c`, `find -delete`" claim, which
+  was true only for the literal patterns enumerated in the list.
+- **README "Choosing a model" now states explicitly that the default
+  is Sonnet**, removing the implicit-Haiku-recommendation that
+  conflicted with the actual defaults in `.env.example`,
+  `docker-compose.yml`, `install.sh`, and `deploy.yml`.
+- **README repo layout** now lists `scripts/bootstrap.sh`, and
+  `auth-obsidian.sh`'s `status`, `sync`, and `continuous` subcommands
+  are documented (Quick start step 4 + Typical operations).
 
 ## [0.1.0] - 2026-04
 

@@ -98,16 +98,30 @@ fi
 # --- 4. Clone or update the repo ---
 if [[ -d "$INSTALL_DIR/.git" ]]; then
   info "Existing clone at $INSTALL_DIR — updating with git pull..."
+  before_sha="$(git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
   git -C "$INSTALL_DIR" fetch --quiet origin
   if ! git -C "$INSTALL_DIR" pull --ff-only --quiet; then
-    warn "Could not fast-forward (uncommitted changes or non-FF). Continuing with current checkout."
+    warn "============================================================"
+    warn "  Could not fast-forward (uncommitted changes or non-FF)."
+    warn "  Continuing with the EXISTING checkout. The repo may be"
+    warn "  stale — see the commit SHA below to confirm what's running."
+    warn "  To force-update: resolve locally, or rerun with"
+    warn "  INSTALL_DIR=<fresh path>."
+    warn "============================================================"
+  fi
+  after_sha="$(git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  if [[ "$before_sha" == "$after_sha" ]]; then
+    ok "Running from commit $after_sha (unchanged)."
+  else
+    ok "Updated $before_sha → $after_sha."
   fi
 elif [[ -d "$INSTALL_DIR" && -n "$(ls -A "$INSTALL_DIR" 2>/dev/null)" ]]; then
-  error "Directory $INSTALL_DIR exists and is not a git checkout. Move it aside or set OBSIDIAN_TELEGRAM_AGENT_DIR."
+  error "Directory $INSTALL_DIR exists and is not a git checkout. Move it aside or set INSTALL_DIR to a fresh path."
 else
   info "Cloning $REPO_URL → $INSTALL_DIR ..."
   git clone --quiet "$REPO_URL" "$INSTALL_DIR"
-  ok "Clone complete."
+  fresh_sha="$(git -C "$INSTALL_DIR" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+  ok "Clone complete (commit $fresh_sha)."
 fi
 
 # --- 5. Hand off to install.sh ---

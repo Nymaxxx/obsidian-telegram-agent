@@ -234,14 +234,34 @@ TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN_VAL
 TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID_VAL
 ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY_VAL
 CLAUDE_MODEL=$CLAUDE_MODEL_VAL
-CLAUDE_USE_API_BILLING=true
+CLAUDE_USE_API_BILLING=${CLAUDE_USE_API_BILLING:-true}
 TZ=$TZ_VAL
-TAKOPI_SESSION_MODE=chat
-TAKOPI_MESSAGE_OVERFLOW=split
+TAKOPI_SESSION_MODE=${TAKOPI_SESSION_MODE:-chat}
+TAKOPI_MESSAGE_OVERFLOW=${TAKOPI_MESSAGE_OVERFLOW:-split}
 VOICE_TRANSCRIPTION_ENABLED=$VOICE_ENABLED_VAL
 OPENAI_API_KEY=$OPENAI_API_KEY_VAL
-OBSIDIAN_AUTOSTART_SYNC=false
+OBSIDIAN_AUTOSTART_SYNC=${OBSIDIAN_AUTOSTART_SYNC:-false}
 EOF
+
+  # Append optional env vars that were set by the caller (cloud-init, CI, the
+  # bootstrap wizard). docker-compose.yml has fallback defaults via ${VAR:-...}
+  # for everything below, so missing keys are harmless — but a value passed via
+  # env would otherwise be lost on the next `docker compose` invocation.
+  for key in IMAGE_TAG \
+             TAKOPI_SHOW_RESUME_LINE \
+             TAKOPI_DEFAULT_ENGINE \
+             TAKOPI_DEFAULT_PROJECT \
+             TAKOPI_TOPICS_ENABLED \
+             TAKOPI_TOPICS_SCOPE \
+             VOICE_TRANSCRIPTION_MODEL \
+             VOICE_TRANSCRIPTION_BASE_URL \
+             VOICE_TRANSCRIPTION_API_KEY \
+             CLAUDE_ALLOWED_TOOLS \
+             CLAUDE_DENIED_COMMANDS; do
+    if [[ -n "${!key:-}" ]]; then
+      printf '%s=%s\n' "$key" "${!key}" >>"$ENV_FILE"
+    fi
+  done
 
   ok "Configuration saved to .env"
 fi

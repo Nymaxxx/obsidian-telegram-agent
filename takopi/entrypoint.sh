@@ -11,7 +11,7 @@ mkdir -p "$HOME/.takopi" "$HOME/.claude" /vault
 # heredoc expansion, so we can't put a JSON array literal directly in the
 # heredoc as a default. Pre-resolve the values into simple shell vars.
 ALLOWED_TOOLS_DEFAULT='["Bash","Read","Edit","Write","Glob","Grep","LS","WebFetch"]'
-DENIED_COMMANDS_DEFAULT='["Bash(rm *)","Bash(rmdir *)","Bash(chmod *)","Bash(chown *)","Bash(dd *)","Bash(mkfs *)","Bash(shred *)","Bash(sudo *)"]'
+DENIED_COMMANDS_DEFAULT='["Bash(rm *)","Bash(rmdir *)","Bash(chmod *)","Bash(chown *)","Bash(dd *)","Bash(mkfs *)","Bash(shred *)","Bash(sudo *)","Bash(find * -delete)","Bash(find * -exec rm *)","Bash(truncate *)"]'
 
 ENGINE="${TAKOPI_DEFAULT_ENGINE:-claude}"
 PROJECT="${TAKOPI_DEFAULT_PROJECT:-obsidian}"
@@ -27,12 +27,35 @@ ALLOWED_TOOLS="${CLAUDE_ALLOWED_TOOLS:-$ALLOWED_TOOLS_DEFAULT}"
 DENIED_COMMANDS="${CLAUDE_DENIED_COMMANDS:-$DENIED_COMMANDS_DEFAULT}"
 USE_API_BILLING="${CLAUDE_USE_API_BILLING:-true}"
 
+# Validate JSON-array env vars before they're interpolated into settings.json
+# / takopi.toml. A malformed value here causes Claude Code to fail with a
+# cryptic parse error and the container goes into restart-loop; failing fast
+# here gives the operator a clear pointer at the broken variable.
+validate_json_array() {
+  local name="$1" value="$2"
+  if ! python3 -c '
+import json, sys
+v = json.loads(sys.argv[1])
+assert isinstance(v, list), "must be a JSON array"
+' "$value" >/dev/null 2>&1; then
+    echo "ERROR: $name is not a valid JSON array. Got: $value" >&2
+    echo "  Expected format: [\"item1\",\"item2\",...]" >&2
+    exit 1
+  fi
+}
+validate_json_array CLAUDE_ALLOWED_TOOLS "$ALLOWED_TOOLS"
+validate_json_array CLAUDE_DENIED_COMMANDS "$DENIED_COMMANDS"
+
 # Claude Code reads ~/.claude/settings.json on every invocation. Its
-# `permissions.deny` rules are the actual security boundary: enforced
-# regardless of permission mode or --dangerously-skip-permissions, and
-# resilient to evasion via `bash -c`, `find -delete`, etc. Generate it
-# from CLAUDE_DENIED_COMMANDS on every container boot so the deny list
-# stays in sync with the env config.
+# `permissions.deny` rules are enforced regardless of permission mode
+# or --dangerously-skip-permissions. The patterns are literal-prefix
+# matches against the Bash invocation, so the default list covers the
+# obvious destructive primitives (rm, rmdir, chmod, find -delete,
+# truncate, etc.) but cannot enumerate every shell evasion (e.g. a
+# Python or Perl script that calls os.remove). Treat the deny list as
+# a guard rail, not a sandbox — vault backups remain mandatory.
+# Generate it from CLAUDE_DENIED_COMMANDS on every container boot so
+# the deny list stays in sync with the env config.
 render_claude_settings() {
   cat > "$HOME/.claude/settings.json" <<JSON
 {
@@ -54,11 +77,17 @@ detect_chat_id() {
   fi
 
   local saved="$HOME/.takopi/chat_id"
-  if [[ -f "$saved" ]]; then
+  # -s (non-empty) catches the rare case where the container was killed
+  # mid-write and left a 0-byte file from a previous /claim attempt.
+  if [[ -s "$saved" ]]; then
     TELEGRAM_CHAT_ID="$(cat "$saved")"
     export TELEGRAM_CHAT_ID
     echo "Loaded persisted chat_id: ${TELEGRAM_CHAT_ID}"
     return 0
+  fi
+  if [[ -f "$saved" ]]; then
+    echo "Warning: $saved exists but is empty — re-running /claim flow." >&2
+    rm -f "$saved"
   fi
 
   if [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]]; then

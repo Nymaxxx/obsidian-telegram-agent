@@ -12,7 +12,9 @@ services:
         max-size: "10m"
         max-file: "3"
     healthcheck:
-      test: ["CMD-SHELL", "pgrep -f takopi"]
+      # Match the takopi binary path explicitly so the entrypoint script
+      # itself doesn't false-positive while waiting for /claim.
+      test: ["CMD-SHELL", "pgrep -f /root/.local/bin/takopi >/dev/null"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -30,7 +32,7 @@ services:
       TAKOPI_TOPICS_SCOPE: "${TAKOPI_TOPICS_SCOPE:-auto}"
       CLAUDE_MODEL: "${CLAUDE_MODEL:-claude-sonnet-4-6}"
       CLAUDE_ALLOWED_TOOLS: '${CLAUDE_ALLOWED_TOOLS:-["Bash","Read","Edit","Write","Glob","Grep","LS","WebFetch"]}'
-      CLAUDE_DENIED_COMMANDS: '${CLAUDE_DENIED_COMMANDS:-["Bash(rm *)","Bash(rmdir *)","Bash(chmod *)","Bash(chown *)","Bash(dd *)","Bash(mkfs *)","Bash(shred *)","Bash(sudo *)"]}'
+      CLAUDE_DENIED_COMMANDS: '${CLAUDE_DENIED_COMMANDS:-["Bash(rm *)","Bash(rmdir *)","Bash(chmod *)","Bash(chown *)","Bash(dd *)","Bash(mkfs *)","Bash(shred *)","Bash(sudo *)","Bash(find * -delete)","Bash(find * -exec rm *)","Bash(truncate *)"]}'
       CLAUDE_USE_API_BILLING: "${CLAUDE_USE_API_BILLING:-true}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
