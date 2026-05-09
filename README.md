@@ -15,19 +15,24 @@ Claude Code runs as a full agent with shell access to your vault — not just an
 
 ## TL;DR
 
+One command on a fresh Ubuntu VPS:
+
 ```bash
-git clone https://github.com/nymaxxx/obsidian-telegram-agent.git
-cd obsidian-telegram-agent
-make setup          # interactive wizard: installs Docker, asks for tokens, starts the stack
+curl -fsSL https://raw.githubusercontent.com/Nymaxxx/obsidian-telegram-agent/main/scripts/bootstrap.sh | bash
 ```
 
-You'll need a [Telegram bot token](https://t.me/botfather), your [Telegram chat ID](#how-to-find-your-telegram-chat-id), and an [Anthropic API key](https://console.anthropic.com/). For Obsidian Sync, run `./scripts/auth-obsidian.sh login` after setup. Full instructions below.
+This installs Docker, clones the repo, runs the interactive wizard (asks for 2 tokens), pulls pre-built images from GHCR, and starts the stack.
+
+You'll need a [Telegram bot token](https://t.me/botfather) and an [Anthropic API key](https://console.anthropic.com/). The bot will auto-detect your chat ID via a one-time `/claim` message ([details](#chat-id-binding)). For Obsidian Sync, run `./scripts/auth-obsidian.sh login` after setup.
+
+For non-interactive deploys (cloud-init, CI), see [One-line install](#one-line-install). For step-by-step manual install, see [Quick start](#quick-start).
 
 ## Table of contents
 
 - [What it can do](#what-it-can-do)
 - [How it works](#how-it-works)
 - [Prerequisites](#prerequisites)
+- [One-line install](#one-line-install)
 - [Quick start](#quick-start)
 - [Configuration](#configuration)
 - [Sessions and conversation flow](#sessions-and-conversation-flow)
@@ -104,9 +109,51 @@ Both containers idle at near-zero when not processing a message, so even a cheap
 
 Any VPS provider works (Hetzner, DigitalOcean, Vultr, etc). For best Telegram latency, pick a European DC (Telegram servers are in Amsterdam and London).
 
+## One-line install
+
+The fastest path on a fresh Ubuntu/Debian VPS — installs Docker, clones the repo, runs the wizard, starts the stack:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Nymaxxx/obsidian-telegram-agent/main/scripts/bootstrap.sh | bash
+```
+
+The wizard prompts for `TELEGRAM_BOT_TOKEN` and `ANTHROPIC_API_KEY` (chat ID is auto-detected — see [Chat ID binding](#chat-id-binding)), then `docker compose pull`s pre-built images from GHCR and starts the stack. Total install time: ~1–2 minutes on a fresh VPS, dominated by Docker install + image pull (~200 MB total).
+
+### Non-interactive (cloud-init, CI, automation)
+
+Pass tokens as environment variables and the wizard skips all prompts:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Nymaxxx/obsidian-telegram-agent/main/scripts/bootstrap.sh \
+  | env \
+      TELEGRAM_BOT_TOKEN=123:abc \
+      ANTHROPIC_API_KEY=sk-ant-... \
+      NONINTERACTIVE=1 \
+      BACKUP_ACKNOWLEDGED=1 \
+      bash
+```
+
+`BACKUP_ACKNOWLEDGED=1` is required in non-interactive mode — it confirms you understand the warning above ([the agent can damage notes](#what-it-can-do)). After install, `docker compose logs -f takopi` will print a `/claim <token>` instruction; send that command to your bot to bind your chat. Optional env vars: `TELEGRAM_CHAT_ID` (skip the claim flow), `CLAUDE_MODEL`, `TZ`, `VOICE_TRANSCRIPTION_ENABLED`, `OPENAI_API_KEY`, `INSTALL_DIR` (default `~/obsidian-telegram-agent`), `IMAGE_TAG` (default `latest`).
+
+### Don't trust curl-pipe-bash?
+
+Download, review, then run:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Nymaxxx/obsidian-telegram-agent/main/scripts/bootstrap.sh -o bootstrap.sh
+less bootstrap.sh
+bash bootstrap.sh
+```
+
+The script is ~120 lines and only does what's documented above (package install, git clone, hand-off to `scripts/install.sh`). It runs `sudo` if you're not root.
+
+### Re-running
+
+`bootstrap.sh` is idempotent. Re-running it on the same VPS does `git pull --ff-only` and restarts containers; it leaves your `.env` alone unless you set `OVERWRITE_ENV=1`.
+
 ## Quick start
 
-> **Tip:** if you'd rather not edit files by hand, run `make setup` after cloning and the wizard walks you through everything below in one go.
+> **Tip:** if you want the wizard without `curl | bash`, clone manually and run `make setup` — same end result.
 
 ### 1. Install Docker on the VPS
 
@@ -117,28 +164,46 @@ curl -fsSL https://get.docker.com | sh
 ### 2. Clone and configure
 
 ```bash
-git clone https://github.com/nymaxxx/obsidian-telegram-agent.git
+git clone https://github.com/Nymaxxx/obsidian-telegram-agent.git
 cd obsidian-telegram-agent
 cp .env.example .env
 ```
 
-Edit `.env` and fill in the three required values:
+Edit `.env` and fill in the two required values:
 
 ```
 TELEGRAM_BOT_TOKEN=your-token
-TELEGRAM_CHAT_ID=your-chat-id
 ANTHROPIC_API_KEY=sk-ant-your-key
 ```
 
-#### How to find your Telegram chat ID
+`TELEGRAM_CHAT_ID` is optional — see [Chat ID binding](#chat-id-binding) below.
 
-Message [@userinfobot](https://t.me/userinfobot) (or [@RawDataBot](https://t.me/RawDataBot)) from the account you want the agent to listen to — it replies with your numeric ID. Use a positive integer for private chats; for group chats, add the bot to the group and use the negative ID returned by `@RawDataBot`.
+#### Chat ID binding
+
+By default, leave `TELEGRAM_CHAT_ID` empty. On first boot the container prints a one-time line like:
+
+```
+============================================================
+  CHAT BINDING REQUIRED
+  Open your Telegram chat with this bot and send:
+      /claim aB3dE7fG9x
+============================================================
+```
+
+Send that exact `/claim <token>` from the chat you want to bind. The bot replies with confirmation, persists the chat ID to `takopi-state/.takopi/chat_id`, and starts serving only that chat. The binding survives restarts. To rebind, delete the file and restart the container.
+
+The random claim token guards against bot-token leaks: an attacker would need both the bot token and access to your container logs to claim the bot.
+
+**Manual override.** If you'd rather not deal with the claim flow, message [@userinfobot](https://t.me/userinfobot) (or [@RawDataBot](https://t.me/RawDataBot)) from the account you want the agent to listen to — it replies with your numeric ID. Set `TELEGRAM_CHAT_ID=<id>` in `.env`. Private chats use a positive integer; group chats use the negative ID returned by `@RawDataBot`.
 
 ### 3. Start the stack
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
+
+This pulls pre-built images from [GHCR](https://github.com/Nymaxxx/obsidian-telegram-agent/pkgs/container/obsidian-telegram-agent%2Ftakopi) and starts both containers. The first pull is ~200 MB total; subsequent pulls fetch only changed layers. To pin a specific image version, set `IMAGE_TAG=<short-sha>` or `IMAGE_TAG=v0.3.0` in `.env`.
 
 ### 4. Set up Obsidian Sync (optional, one-time)
 
@@ -288,7 +353,8 @@ Obsidian Sync will sync `.trash/` like any other folder. If you don't want it on
 Two workflows live in [`.github/workflows/`](.github/workflows/):
 
 - [`ci.yml`](.github/workflows/ci.yml) runs on every PR and push: shellcheck on shell scripts, hadolint on the Dockerfiles, actionlint on the workflows themselves, and `docker compose config -q` to validate the compose file. Lint-only, no image build, ~30 seconds.
-- [`deploy.yml`](.github/workflows/deploy.yml) runs on pushes to `main` (and via manual dispatch). It SSHs into the VPS, syncs code, writes `.env` from GitHub Secrets, runs `docker compose up --build -d`, and prunes dangling images. Telegram notifications are sent on success and failure.
+- [`deploy.yml`](.github/workflows/deploy.yml) runs on pushes to `main` (and via manual dispatch). It SSHs into the VPS, syncs code, writes `.env` from GitHub Secrets, runs `docker compose pull && docker compose up -d`, and prunes dangling images. Telegram notifications are sent on success and failure.
+- [`build-images.yml`](.github/workflows/build-images.yml) runs when `takopi/**` or `obsidian-headless/**` changes on `main` (or on Release publish). It builds and pushes multi-arch (amd64+arm64) images to GHCR with tags `latest`, `<short-sha>`, and (for releases) `v<X.Y.Z>`.
 
 ### Required GitHub Secrets
 
@@ -336,7 +402,8 @@ docker inspect --format='{{.State.Health.Status}}' takopi
 Or use the Makefile shortcuts:
 
 ```bash
-make up       # docker compose up -d --build
+make up       # docker compose pull && docker compose up -d
+make up-dev   # build locally with docker-compose.dev.yml override
 make down     # docker compose down
 make logs     # docker compose logs -f --tail=200
 ```
@@ -491,7 +558,7 @@ No inbound ports needed.
 
 - [Changelog](CHANGELOG.md)
 - [Contributing](CONTRIBUTING.md)
-- [Issue tracker](https://github.com/nymaxxx/obsidian-telegram-agent/issues)
+- [Issue tracker](https://github.com/Nymaxxx/obsidian-telegram-agent/issues)
 
 ## License
 

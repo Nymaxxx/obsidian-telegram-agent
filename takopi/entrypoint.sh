@@ -43,9 +43,111 @@ render_claude_settings() {
 JSON
 }
 
+# Auto-detect TELEGRAM_CHAT_ID from a one-time /claim message if it isn't set.
+# Bound chat_id is persisted to $HOME/.takopi/chat_id, so this only runs once
+# per install. The /claim flow (vs. "trust the first message") guards against
+# bot-token leaks: an attacker would need both the bot token and the random
+# claim token printed on the operator's container logs to bind the bot.
+detect_chat_id() {
+  if [[ -n "${TELEGRAM_CHAT_ID:-}" && "${TELEGRAM_CHAT_ID}" != "auto" ]]; then
+    return 0
+  fi
+
+  local saved="$HOME/.takopi/chat_id"
+  if [[ -f "$saved" ]]; then
+    TELEGRAM_CHAT_ID="$(cat "$saved")"
+    export TELEGRAM_CHAT_ID
+    echo "Loaded persisted chat_id: ${TELEGRAM_CHAT_ID}"
+    return 0
+  fi
+
+  if [[ -z "${TELEGRAM_BOT_TOKEN:-}" ]]; then
+    echo "ERROR: TELEGRAM_BOT_TOKEN must be set for chat_id auto-detect." >&2
+    exit 1
+  fi
+
+  local claim_token
+  claim_token="$(head -c 16 /dev/urandom | base64 | tr -d '+/=' | head -c 12)"
+
+  cat <<EOF
+
+============================================================
+  CHAT BINDING REQUIRED
+
+  Open your Telegram chat with this bot and send:
+
+      /claim ${claim_token}
+
+  The bot will reply with confirmation and start serving
+  only that chat. This binding survives container restarts.
+
+  Waiting...
+============================================================
+
+EOF
+
+  CLAIM_TOKEN="$claim_token" \
+  CHAT_ID_FILE="$saved" \
+    python3 - <<'PY'
+import os
+import sys
+import time
+import json
+import urllib.request
+import urllib.parse
+
+token = os.environ["TELEGRAM_BOT_TOKEN"]
+claim = os.environ["CLAIM_TOKEN"]
+expected = f"/claim {claim}"
+api = f"https://api.telegram.org/bot{token}"
+offset = 0
+
+while True:
+    try:
+        url = f"{api}/getUpdates?timeout=30&offset={offset}"
+        with urllib.request.urlopen(url, timeout=35) as r:
+            data = json.load(r)
+        for upd in data.get("result", []):
+            offset = upd["update_id"] + 1
+            msg = upd.get("message") or upd.get("edited_message")
+            if not msg:
+                continue
+            if msg.get("text", "").strip() == expected:
+                chat_id = msg["chat"]["id"]
+                with open(os.environ["CHAT_ID_FILE"], "w") as f:
+                    f.write(str(chat_id))
+                ack = f"{api}/sendMessage"
+                payload = urllib.parse.urlencode({
+                    "chat_id": chat_id,
+                    "text": (
+                        "Bound. From now on this bot only listens to chat "
+                        f"{chat_id}."
+                    ),
+                }).encode()
+                try:
+                    urllib.request.urlopen(
+                        urllib.request.Request(ack, data=payload),
+                        timeout=10,
+                    ).read()
+                except Exception:
+                    pass
+                print(chat_id)
+                sys.exit(0)
+    except KeyboardInterrupt:
+        sys.exit(130)
+    except Exception as e:
+        print(f"poll error: {e}", file=sys.stderr)
+        time.sleep(2)
+PY
+
+  TELEGRAM_CHAT_ID="$(cat "$saved")"
+  export TELEGRAM_CHAT_ID
+  echo "Bound to chat_id: ${TELEGRAM_CHAT_ID}"
+}
+
 render_takopi_config() {
   : "${TELEGRAM_BOT_TOKEN:?TELEGRAM_BOT_TOKEN is required}"
-  : "${TELEGRAM_CHAT_ID:?TELEGRAM_CHAT_ID is required}"
+  : "${TELEGRAM_CHAT_ID:?TELEGRAM_CHAT_ID is required (auto-detect should have set it)}"
 
   {
     cat <<TOML
@@ -90,6 +192,7 @@ TOML
 }
 
 render_claude_settings
+detect_chat_id
 render_takopi_config
 
 echo "Generated Claude settings at $HOME/.claude/settings.json"
