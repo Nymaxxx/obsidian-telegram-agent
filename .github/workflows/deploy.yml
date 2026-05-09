@@ -9,6 +9,7 @@ name: Deploy
 #   ANTHROPIC_API_KEY    — Anthropic API key for Claude
 #
 # Optional secrets (omit to use docker-compose defaults):
+#   IMAGE_TAG                    — GHCR image tag to pull (default: latest)
 #   TZ                           — Timezone (default: Europe/Amsterdam)
 #   OBSIDIAN_AUTOSTART_SYNC      — true/false, enable continuous Obsidian Sync (default: false)
 #   CLAUDE_MODEL                 — Claude model to use (default: claude-sonnet-4-6)
@@ -49,6 +50,7 @@ jobs:
             fi
 
             {
+              echo "IMAGE_TAG=${{ secrets.IMAGE_TAG || 'latest' }}"
               echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}"
               echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}"
               echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}"
@@ -71,7 +73,8 @@ jobs:
             [ -n '${{ secrets.CLAUDE_DENIED_COMMANDS }}' ] && \
               echo 'CLAUDE_DENIED_COMMANDS=${{ secrets.CLAUDE_DENIED_COMMANDS }}' >> .env || true
 
-            docker compose up --build -d
+            docker compose pull
+            docker compose up -d
             docker image prune -f
             echo "Deploy complete"
 

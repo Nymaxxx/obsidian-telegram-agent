@@ -1,7 +1,6 @@
 services:
   takopi:
-    build:
-      context: ./takopi
+    image: ghcr.io/nymaxxx/obsidian-telegram-agent/takopi:${IMAGE_TAG:-latest}
     container_name: takopi
     restart: unless-stopped
     mem_limit: 768m
@@ -46,8 +45,7 @@ services:
       - "/vault/90 Archive:size=1k,mode=0000"
 
   obsidian-headless:
-    build:
-      context: ./obsidian-headless
+    image: ghcr.io/nymaxxx/obsidian-telegram-agent/obsidian-headless:${IMAGE_TAG:-latest}
     container_name: obsidian-headless
     restart: unless-stopped
     stdin_open: true

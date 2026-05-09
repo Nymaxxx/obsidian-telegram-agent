@@ -7,6 +7,37 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **One-line VPS install via `scripts/bootstrap.sh`.** A single
+  `curl ... | bash` command installs Docker, clones the repo, runs the
+  wizard, and starts the stack. Supports both interactive and
+  non-interactive (cloud-init / CI) modes via env vars. New README
+  section "One-line install".
+- **Pre-built multi-arch Docker images on GHCR.** New
+  `.github/workflows/build-images.yml` builds and pushes
+  `linux/amd64` + `linux/arm64` images for both services on every push
+  to `main` and on Release publish. Cuts VPS install time from
+  ~5–10 min (local build) to ~30 seconds (image pull); also fixes OOM
+  on 1 GB VPS. Tags: `latest`, `<short-sha>`, `v<X.Y.Z>`.
+- **`docker-compose.dev.yml` override** for contributors who want to
+  build locally. Keeps the production compose file lean and pins local
+  builds to `:dev` tag so they can't collide with `:latest`.
+- **`IMAGE_TAG` env var** in `.env.example` and `deploy.yml` for
+  pinning the image version.
+- **Auto-detect Telegram chat_id via `/claim` flow.** If
+  `TELEGRAM_CHAT_ID` is unset, `takopi/entrypoint.sh` polls
+  `getUpdates`, prints a one-time random claim token, and waits for
+  the operator to send `/claim <token>` from the chat they want to
+  bind. The detected chat_id is persisted to
+  `takopi-state/.takopi/chat_id`. Reduces required secrets from 3 to
+  2 (bot token + Anthropic key).
+- **Non-interactive mode for `scripts/install.sh`** via
+  `NONINTERACTIVE=1` (or `--non-interactive`). Reads required env
+  vars instead of prompting. New helper `read_tty` makes the
+  interactive path work under `curl-pipe-bash`.
+- **`scripts/install.sh` `--help` flag** documents the available env
+  vars and flags.
+- **`make bootstrap`, `make setup-ci`, `make up-dev`, `make pull`** —
+  Makefile shortcuts for the new flows.
 - Prominent disclaimer in the README about the agent's destructive
   capabilities and the "use at your own risk" nature of the project.
 - New `Backups` section with recommended strategies (git, restic/borg,
@@ -53,6 +84,24 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ISSUE_TEMPLATE folder, `install.sh`, `CHANGELOG.md`, and `vault/.trash/`.
 
 ### Changed
+- **`docker-compose.yml` now uses `image:` (GHCR) by default** instead
+  of `build:`. Local development uses the new `docker-compose.dev.yml`
+  override.
+- **`scripts/install.sh` and `.github/workflows/deploy.yml`** now
+  `docker compose pull && docker compose up -d` instead of building
+  locally. `make up` mirrors this.
+- **`TELEGRAM_CHAT_ID` is now optional** in `.env.example` and the
+  install wizard. The "How to find your chat ID" README section is
+  reframed as a manual override under the new "Chat ID binding"
+  heading.
+- **README TL;DR leads with the one-line install** and points at both
+  interactive and non-interactive forms. Quick start section retains
+  step-by-step manual instructions.
+- **Repo URL casing normalized** to `Nymaxxx/obsidian-telegram-agent`
+  (was inconsistently lowercased as `nymaxxx/...` in places). The
+  install directory stays `~/obsidian-telegram-agent`. Affects
+  README, CONTRIBUTING, ISSUE_TEMPLATE config, and the bootstrap /
+  GHCR image references.
 - **Two-layer security model for the agent's command surface.** End-to-end
   testing showed that the previously-shipped narrow allowlist
   (`Bash(mv *)`, `Bash(git *)`) silently breaks `mv` in Takopi's
