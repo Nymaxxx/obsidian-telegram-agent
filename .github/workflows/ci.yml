@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck
+        uses: ludeeus/action-shellcheck@2.0.0
+        with:
+          scandir: "."
+          severity: warning
+
+      - name: hadolint (takopi)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: takopi/Dockerfile
+          ignore: DL3008,DL3059
+
+      - name: hadolint (obsidian-headless)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: obsidian-headless/Dockerfile
+          ignore: DL3018,DL3059
+
+      - name: actionlint
+        shell: bash
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color
+
+      - name: docker compose config
+        env:
+          TELEGRAM_BOT_TOKEN: dummy
+          TELEGRAM_CHAT_ID: "0"
+          ANTHROPIC_API_KEY: dummy
+        run: docker compose config -q

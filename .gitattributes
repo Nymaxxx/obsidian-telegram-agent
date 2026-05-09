@@ -1,0 +1,17 @@
+# Force LF line endings for files that must be Unix-compatible.
+# Without this, Windows users may commit CRLF, which breaks bash on Linux
+# (the shebang line `#!/usr/bin/env bash<CR>` makes the kernel look for an
+# interpreter named "bash<CR>" which does not exist).
+
+*.sh         text eol=lf
+*.bash       text eol=lf
+Dockerfile   text eol=lf
+Makefile     text eol=lf
+*.yml        text eol=lf
+*.yaml       text eol=lf
+*.toml       text eol=lf
+*.md         text eol=lf
+.env*        text eol=lf
+.gitignore   text eol=lf
+.gitattributes text eol=lf
+LICENSE      text eol=lf

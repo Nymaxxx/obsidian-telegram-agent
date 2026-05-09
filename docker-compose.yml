@@ -1,0 +1,89 @@
+services:
+  takopi:
+    image: ghcr.io/nymaxxx/obsidian-telegram-agent/takopi:${IMAGE_TAG:-latest}
+    container_name: takopi
+    restart: unless-stopped
+    mem_limit: 768m
+    memswap_limit: 768m
+    cpus: 1.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      # Match the takopi binary path explicitly so the entrypoint script
+      # itself doesn't false-positive while waiting for /claim.
+      test: ["CMD-SHELL", "pgrep -f /root/.local/bin/takopi >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    environment:
+      TZ: "${TZ:-Europe/Amsterdam}"
+      TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN}"
+      TELEGRAM_CHAT_ID: "${TELEGRAM_CHAT_ID:-}"
+      TAKOPI_DEFAULT_ENGINE: "${TAKOPI_DEFAULT_ENGINE:-claude}"
+      TAKOPI_DEFAULT_PROJECT: "${TAKOPI_DEFAULT_PROJECT:-obsidian}"
+      TAKOPI_SESSION_MODE: "${TAKOPI_SESSION_MODE:-chat}"
+      TAKOPI_SHOW_RESUME_LINE: "${TAKOPI_SHOW_RESUME_LINE:-true}"
+      TAKOPI_MESSAGE_OVERFLOW: "${TAKOPI_MESSAGE_OVERFLOW:-split}"
+      TAKOPI_TOPICS_ENABLED: "${TAKOPI_TOPICS_ENABLED:-false}"
+      TAKOPI_TOPICS_SCOPE: "${TAKOPI_TOPICS_SCOPE:-auto}"
+      CLAUDE_MODEL: "${CLAUDE_MODEL:-claude-haiku-4-5}"
+      CLAUDE_ALLOWED_TOOLS: '${CLAUDE_ALLOWED_TOOLS:-["Bash","Read","Edit","Write","Glob","Grep","LS","WebFetch"]}'
+      CLAUDE_DENIED_COMMANDS: '${CLAUDE_DENIED_COMMANDS:-["Bash(rm *)","Bash(rmdir *)","Bash(chmod *)","Bash(chown *)","Bash(dd *)","Bash(mkfs *)","Bash(shred *)","Bash(sudo *)","Bash(find * -delete)","Bash(find * -exec rm *)","Bash(truncate *)"]}'
+      CLAUDE_USE_API_BILLING: "${CLAUDE_USE_API_BILLING:-true}"
+      CLAUDE_EXTRA_INSTRUCTIONS: "${CLAUDE_EXTRA_INSTRUCTIONS:-}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      VOICE_TRANSCRIPTION_ENABLED: "${VOICE_TRANSCRIPTION_ENABLED:-false}"
+      VOICE_TRANSCRIPTION_MODEL: "${VOICE_TRANSCRIPTION_MODEL:-gpt-4o-mini-transcribe}"
+      VOICE_TRANSCRIPTION_BASE_URL: "${VOICE_TRANSCRIPTION_BASE_URL:-}"
+      VOICE_TRANSCRIPTION_API_KEY: "${VOICE_TRANSCRIPTION_API_KEY:-}"
+    volumes:
+      - ./vault:/vault
+      - ./takopi-state:/state
+    # Optional: hard-isolate folders by mounting a tmpfs over them so the agent
+    # physically cannot read, list, or write anything inside, even if it ignores
+    # the soft "off-limits" rules from CLAUDE.local.md. Uncomment and add your
+    # own paths. Obsidian Headless still syncs these folders normally.
+    # tmpfs:
+    #   - "/vault/Archive:size=1k,mode=0000"
+    #   - "/vault/private:size=1k,mode=0000"
+
+  obsidian-headless:
+    image: ghcr.io/nymaxxx/obsidian-telegram-agent/obsidian-headless:${IMAGE_TAG:-latest}
+    container_name: obsidian-headless
+    restart: unless-stopped
+    stdin_open: true
+    tty: true
+    mem_limit: 512m
+    memswap_limit: 512m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      # $${VAR} (not ${VAR}) so the env var is read inside the container
+      # at runtime, not pre-substituted by docker compose at parse time.
+      test:
+        - CMD-SHELL
+        - |
+          if [ "$${OBSIDIAN_AUTOSTART_SYNC:-false}" = "true" ]; then
+            pgrep -f 'ob sync' >/dev/null
+          else
+            exit 0
+          fi
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    environment:
+      TZ: "${TZ:-Europe/Amsterdam}"
+      OBSIDIAN_AUTOSTART_SYNC: "${OBSIDIAN_AUTOSTART_SYNC:-false}"
+    volumes:
+      - ./vault:/vault
+      - ./obsidian-state:/state

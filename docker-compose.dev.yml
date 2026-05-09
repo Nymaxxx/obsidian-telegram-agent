@@ -1,0 +1,17 @@
+# Compose override for local development.
+# Use it to build images from source instead of pulling from GHCR:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#
+# The override re-introduces `build:` and pins the local image to a `:dev`
+# tag so a local rebuild can never silently overwrite the `:latest` tag your
+# VPS expects.
+
+services:
+  takopi:
+    build: ./takopi
+    image: ghcr.io/nymaxxx/obsidian-telegram-agent/takopi:dev
+
+  obsidian-headless:
+    build: ./obsidian-headless
+    image: ghcr.io/nymaxxx/obsidian-telegram-agent/obsidian-headless:dev

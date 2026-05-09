@@ -1,0 +1,117 @@
+name: Deploy
+
+# Required secrets:
+#   VPS_HOST             — IP or hostname of the VPS
+#   VPS_USER             — SSH username
+#   VPS_SSH_KEY          — SSH private key
+#   TELEGRAM_BOT_TOKEN   — Telegram bot token
+#   TELEGRAM_CHAT_ID     — Telegram chat ID for notifications
+#   ANTHROPIC_API_KEY    — Anthropic API key for Claude
+#
+# Optional secrets (omit to use docker-compose defaults):
+#   IMAGE_TAG                    — GHCR image tag to pull (default: latest)
+#   TZ                           — Timezone (default: Europe/Amsterdam)
+#   OBSIDIAN_AUTOSTART_SYNC      — true/false, enable continuous Obsidian Sync (default: false)
+#   CLAUDE_MODEL                 — Claude model to use (default: claude-haiku-4-5)
+#   CLAUDE_ALLOWED_TOOLS         — JSON array of tools Claude may call
+#   CLAUDE_DENIED_COMMANDS       — JSON array of Bash patterns hard-blocked via ~/.claude/settings.json
+#
+# Optional Variables or Secrets (Variables preferred — visible in UI, not masked in logs):
+#   CLAUDE_EXTRA_INSTRUCTIONS    — text appended to vault/CLAUDE.md at every container start.
+#                                  Set as a GitHub Actions Variable (Settings → Variables) so you can
+#                                  read and edit it later. Set as a Secret only if the text really is
+#                                  sensitive — Variable wins if both are present.
+#   VOICE_TRANSCRIPTION_ENABLED  — true/false, enable voice note transcription (default: false)
+#   OPENAI_API_KEY               — OpenAI key for voice transcription
+#   VOICE_TRANSCRIPTION_API_KEY  — API key if using a custom transcription provider
+#   VOICE_TRANSCRIPTION_BASE_URL — Base URL for custom transcription provider
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  DEPLOY_DIR: obsidian-telegram-agent
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        env:
+          # Pulled out of `script:` because multi-line values break YAML
+          # indentation when interpolated inline as `${{ ... }}`.
+          # appleboy/ssh-action exports listed envs to the remote shell.
+          # Variable wins if set; secret is a fallback for users who prefer it.
+          CLAUDE_EXTRA_INSTRUCTIONS: ${{ vars.CLAUDE_EXTRA_INSTRUCTIONS || secrets.CLAUDE_EXTRA_INSTRUCTIONS }}
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          envs: DEPLOY_DIR,CLAUDE_EXTRA_INSTRUCTIONS
+          script: |
+            set -euo pipefail
+            DEPLOY_DIR="${DEPLOY_DIR:-obsidian-telegram-agent}"
+            if [ -d ~/"$DEPLOY_DIR" ]; then
+              cd ~/"$DEPLOY_DIR" && git fetch origin && git reset --hard origin/main
+            else
+              git clone https://github.com/${{ github.repository }}.git ~/"$DEPLOY_DIR"
+              cd ~/"$DEPLOY_DIR"
+            fi
+
+            {
+              echo "IMAGE_TAG=${{ secrets.IMAGE_TAG || 'latest' }}"
+              echo "TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}"
+              echo "TELEGRAM_CHAT_ID=${{ secrets.TELEGRAM_CHAT_ID }}"
+              echo "ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}"
+              echo "CLAUDE_USE_API_BILLING=true"
+              echo "TZ=${{ secrets.TZ || 'Europe/Amsterdam' }}"
+              echo "OBSIDIAN_AUTOSTART_SYNC=${{ secrets.OBSIDIAN_AUTOSTART_SYNC || 'false' }}"
+              echo "VOICE_TRANSCRIPTION_ENABLED=${{ secrets.VOICE_TRANSCRIPTION_ENABLED || 'false' }}"
+              echo "CLAUDE_MODEL=${{ secrets.CLAUDE_MODEL || 'claude-haiku-4-5' }}"
+            } > .env
+
+            # Optional secrets — only written if set
+            [ -n '${{ secrets.OPENAI_API_KEY }}' ] && \
+              echo 'OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}' >> .env || true
+            [ -n '${{ secrets.VOICE_TRANSCRIPTION_API_KEY }}' ] && \
+              echo 'VOICE_TRANSCRIPTION_API_KEY=${{ secrets.VOICE_TRANSCRIPTION_API_KEY }}' >> .env || true
+            [ -n '${{ secrets.VOICE_TRANSCRIPTION_BASE_URL }}' ] && \
+              echo 'VOICE_TRANSCRIPTION_BASE_URL=${{ secrets.VOICE_TRANSCRIPTION_BASE_URL }}' >> .env || true
+            [ -n '${{ secrets.CLAUDE_ALLOWED_TOOLS }}' ] && \
+              echo 'CLAUDE_ALLOWED_TOOLS=${{ secrets.CLAUDE_ALLOWED_TOOLS }}' >> .env || true
+            [ -n '${{ secrets.CLAUDE_DENIED_COMMANDS }}' ] && \
+              echo 'CLAUDE_DENIED_COMMANDS=${{ secrets.CLAUDE_DENIED_COMMANDS }}' >> .env || true
+
+            # CLAUDE_EXTRA_INSTRUCTIONS arrives as an env var (see envs: above)
+            # so multi-line content survives the YAML round-trip. docker-compose
+            # supports quoted multi-line values in .env; escape any internal
+            # double quotes and wrap the whole value in quotes so newlines are
+            # preserved verbatim by the .env parser.
+            if [ -n "${CLAUDE_EXTRA_INSTRUCTIONS:-}" ]; then
+              CLAUDE_EXTRA_ESCAPED=$(printf '%s' "$CLAUDE_EXTRA_INSTRUCTIONS" | sed 's/"/\\"/g')
+              printf 'CLAUDE_EXTRA_INSTRUCTIONS="%s"\n' "$CLAUDE_EXTRA_ESCAPED" >> .env
+            fi
+
+            docker compose pull
+            docker compose up -d
+            docker image prune -f
+            echo "Deploy complete"
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="Deploy failed. Check: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            -d parse_mode=HTML
+
+      - name: Notify on success
+        if: success()
+        run: |
+          curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+            -d chat_id="${{ secrets.TELEGRAM_CHAT_ID }}" \
+            -d text="Deploy OK (${{ github.sha }})" \
+            -d parse_mode=HTML

@@ -1,0 +1,11 @@
+.env
+takopi-state/
+obsidian-state/
+vault/.obsidian/
+vault/**/*.md
+vault/.trash/*
+!vault/.trash/.gitkeep
+!vault/CLAUDE.base.md
+!vault/templates/*.md
+.vscode/
+.DS_Store

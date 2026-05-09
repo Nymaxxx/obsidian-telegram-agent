@@ -1,0 +1,103 @@
+# Your personal vault rules
+
+This file is **not version controlled** and is **not touched by deploys**. Anything you put here is appended after `CLAUDE.base.md` when the takopi container assembles `vault/CLAUDE.md` on start. Your rules win against the base on conflict (they're read later).
+
+`CLAUDE.base.md` defines safety rules and a generic message-handling template, but it deliberately knows nothing about *your* folder layout, language, or tagging style. Everything below is yours to define.
+
+Edit freely. After saving, send `/new` in Telegram (or `docker compose restart takopi` on the VPS) to start a fresh Claude session that picks up the changes.
+
+## Vault structure
+
+Tell the agent what your folders are and what each is for. Pick one of the examples below and edit, or write your own from scratch.
+
+<details>
+<summary>Example 1 — PARA with numeric prefixes</summary>
+
+```
+/vault
+├── 00 Projects/          ← active projects with a defined outcome
+├── 10 Areas/
+│   └── Inbox/            ← default landing for quick captures
+├── 20 Resources/         ← reference material by topic
+├── 90 Archive/           ← off-limits, do not access
+└── templates/
+```
+
+Default Inbox: `10 Areas/Inbox/`. Off-limits: `90 Archive/`.
+</details>
+
+<details>
+<summary>Example 2 — PARA without prefixes</summary>
+
+```
+/vault
+├── Projects/
+├── Areas/
+│   └── Inbox/
+├── Resources/
+└── Archive/             ← off-limits
+```
+
+Default Inbox: `Areas/Inbox/`. Off-limits: `Archive/`.
+</details>
+
+<details>
+<summary>Example 3 — Flat vault (Zettelkasten-style)</summary>
+
+```
+/vault
+├── Inbox/
+├── notes/
+└── reading-list/
+```
+
+Default Inbox: `Inbox/`. No off-limits paths beyond the always-blocked `.obsidian/` and `.trash/`.
+</details>
+
+**My vault:**
+
+> _(replace this with your real layout — paste the tree of `/vault` and label each folder)_
+
+## Capture rules
+
+Tell the agent where new captures should land if you don't say otherwise. For example:
+
+- Quick text captures → `Areas/Inbox/`
+- Forwarded URLs → `Areas/Inbox/`
+- Voice transcripts → `Areas/Inbox/voice/`
+- Active project work → `Projects/<project name>/`
+- Reference material → `Resources/<topic>/`
+
+## Off-limits paths
+
+Folders the agent must never read, write, or list, **in addition to** the always-blocked paths in `CLAUDE.base.md` (`.obsidian/`, `.trash/`). For example:
+
+- `Archive/`
+- `private/`
+- `clients/`
+
+## Frontmatter convention (optional)
+
+If you want a consistent frontmatter on captured notes, define it here. For example:
+
+```yaml
+---
+created: YYYY-MM-DD
+tags: []
+source: <url or "telegram">
+status: inbox
+---
+```
+
+If you don't care, leave this section empty and the agent will match whatever style your existing notes use.
+
+## Personal preferences
+
+- Language for new notes (English / Russian / German / …).
+- Tagging style (`#tag` vs YAML `tags:`).
+- Bullet lists vs paragraphs.
+- Anything else specific to you.
+
+---
+
+Delete or rewrite the sections above to match your needs. Empty sections are fine — Claude only reads what's actually here.
