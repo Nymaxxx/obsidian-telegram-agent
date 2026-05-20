@@ -1,0 +1,27 @@
+title: Obsidian Telegram Agent
+description: >-
+  A Telegram bot that gives Claude Code read/write access to your Obsidian
+  vault — capture text and voice notes, save articles, search, and organize,
+  all from Telegram.
+
+url: https://nymaxxx.github.io
+baseurl: /obsidian-telegram-agent
+
+theme: jekyll-theme-cayman
+
+plugins:
+  - jekyll-seo-tag
+  - jekyll-sitemap
+  - jekyll-relative-links
+
+# Google Search Console verification.
+# Add a property in Search Console, pick the HTML-tag verification method,
+# copy the content="..." value, then uncomment the line below and paste it in.
+# google_site_verification: PASTE_CODE_HERE
+
+exclude:
+  - vault/
+  - scripts/
+  - takopi/
+  - obsidian-headless/
+  - templates/
