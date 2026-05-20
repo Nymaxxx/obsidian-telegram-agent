@@ -14,10 +14,8 @@ plugins:
   - jekyll-sitemap
   - jekyll-relative-links
 
-# Google Search Console verification.
-# Add a property in Search Console, pick the HTML-tag verification method,
-# copy the content="..." value, then uncomment the line below and paste it in.
-# google_site_verification: PASTE_CODE_HERE
+# Google Search Console verification (jekyll-seo-tag renders the meta tag).
+google_site_verification: XqaPg7SI1farExRpcY2mtnSktDp4-EFjYr8Fko6lxqM
 
 exclude:
   - vault/
