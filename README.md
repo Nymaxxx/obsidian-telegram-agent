@@ -5,6 +5,7 @@ A Telegram bot that gives Claude Code read/write access to your Obsidian vault.
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
 [![Powered by Claude](https://img.shields.io/badge/powered%20by-Claude-D97757)](https://docs.anthropic.com/en/docs/claude-code)
+[![Website](https://img.shields.io/badge/docs-nymaxxx.github.io-success)](https://nymaxxx.github.io/obsidian-telegram-agent/)
 
 Forward a link to save an article. Send a voice note on the go. Ask it to clean up old project notes. No app-switching, no copy-pasting — just message the bot.
 
