@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-05-24
+
 ### Added
 - **Customizable `CLAUDE.md` via three layers.** `vault/CLAUDE.md` is now
   generated on every takopi container start by concatenating
