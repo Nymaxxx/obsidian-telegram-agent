@@ -1,8 +1,9 @@
 title: Obsidian Telegram Agent
+tagline: Self-hosted Claude Code agent for your Obsidian vault, accessible via Telegram
 description: >-
-  A Telegram bot that gives Claude Code read/write access to your Obsidian
-  vault — capture text and voice notes, save articles, search, and organize,
-  all from Telegram.
+  Self-hosted Telegram bot that runs Claude Code as a shell-level agent over
+  your Obsidian vault. Docker Compose stack, voice transcription via Whisper,
+  Obsidian Sync for desktop/mobile delivery. One-command VPS install.
 
 url: https://nymaxxx.github.io
 baseurl: /obsidian-telegram-agent

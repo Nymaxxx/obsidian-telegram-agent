@@ -1,3 +1,8 @@
+---
+title: "Configuration"
+description: "All .env settings, repository layout, the three CLAUDE.md layers, and how to choose a Claude model for the Obsidian Telegram agent stack."
+---
+
 # Configuration
 
 ← Back to [README](../README.md)

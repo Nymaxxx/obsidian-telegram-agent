@@ -1,3 +1,8 @@
+---
+title: "Backups"
+description: "Why an Obsidian vault under agent control needs an independent backup, plus git, restic, and VPS-snapshot strategies that actually work."
+---
+
 # Backups
 
 ← Back to [README](../README.md)

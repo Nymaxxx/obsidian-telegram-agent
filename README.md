@@ -1,6 +1,6 @@
 # Obsidian Telegram Agent
 
-A Telegram bot that gives Claude Code read/write access to your Obsidian vault.
+Run Claude Code as a Telegram-accessible agent over your Obsidian vault. Self-hosted, one-command VPS install, voice notes included.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Docker](https://img.shields.io/badge/docker-compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)

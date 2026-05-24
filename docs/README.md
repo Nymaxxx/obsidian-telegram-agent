@@ -1,3 +1,8 @@
+---
+title: "Documentation — Obsidian Telegram Agent"
+description: "Long-form docs for the self-hosted Telegram bot that gives Claude Code shell-level access to your Obsidian vault — install, configure, secure, back up."
+---
+
 # Documentation
 
 Long-form docs for [obsidian-telegram-agent](../README.md). The main README covers install and a quick start; everything below goes deeper.

@@ -1,3 +1,8 @@
+---
+title: "Vault isolation"
+description: "Hide folders from the Claude Code agent with CLAUDE.local.md soft rules or Docker tmpfs mounts, plus soft-delete via /vault/.trash/."
+---
+
 # Vault isolation
 
 ← Back to [README](../README.md)

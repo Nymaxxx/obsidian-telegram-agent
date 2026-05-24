@@ -1,3 +1,8 @@
+---
+title: "Operations and troubleshooting"
+description: "Daily commands, Makefile shortcuts, and fixes for stale Takopi lockfiles, missed Obsidian Sync pulls, and lost /claim tokens."
+---
+
 # Operations and troubleshooting
 
 ← Back to [README](../README.md)

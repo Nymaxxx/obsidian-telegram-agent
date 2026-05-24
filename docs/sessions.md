@@ -1,3 +1,8 @@
+---
+title: "Sessions and conversation flow"
+description: "How Telegram messages map to resumed Claude Code sessions, when to use /new and /cancel, and how context accumulates between messages."
+---
+
 # Sessions and conversation flow
 
 ← Back to [README](../README.md)

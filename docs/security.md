@@ -1,3 +1,8 @@
+---
+title: "Security notes"
+description: "Threat model, the Bash deny list, prompt-injection caveats, and a full VPS hardening checklist for the Obsidian Telegram Agent."
+---
+
 # Security notes
 
 ← Back to [README](../README.md)

@@ -1,3 +1,8 @@
+---
+title: "Auto-deploy with GitHub Actions"
+description: "CI workflows, GitHub Secrets, SSH setup, and the image-build pipeline for shipping the Obsidian Telegram Agent to a VPS automatically."
+---
+
 # Auto-deploy with GitHub Actions
 
 ← Back to [README](../README.md)
