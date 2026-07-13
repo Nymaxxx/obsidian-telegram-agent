@@ -330,7 +330,7 @@ The core dependency question: Takopi is dormant.
 | C: own minimal bridge on the Claude Agent SDK | Full control; hooks/subagents/streaming programmatically; secrets handled our way (fixes S2 properly); slash-commands, scheduling, and heartbeat become first-class; smallest possible attack surface | It's a real project: Telegram long-polling, session persistence, voice pipeline, message splitting, error UX all reimplemented; ongoing maintenance moves onto this repo | **XL** |
 | D: official Claude Code Channels | First-party, maintained by Anthropic | Architecture mismatch: requires a permanently-running interactive session (messages lost when down — unacceptable for a capture tool); no history; Bun dependency; research-preview status | M to try, but poor fit |
 
-**Chosen: A now, C as the long-term roadmap direction.** Revisit if (a) a Telegram Bot API or Claude Code CLI change breaks Takopi, or (b) Stage 3 features start fighting the bridge's limits. Option C should start as a spike (one file, text-only, reusing the existing container layout) before committing.
+**Chosen: A now, C as the long-term roadmap direction.** Revisit if (a) a Telegram Bot API or Claude Code CLI change breaks Takopi, or (b) Stage 3 features start fighting the bridge's limits. Option C is assessed in depth — real code-size data from all alternatives, what to build, what to reuse, phased plan — in the dedicated [SDK bridge plan](sdk-bridge-plan.md); its headline: a purpose-built bridge is ~1.5–2.5k lines (the SDK absorbs what made Takopi 21k), start with a 2–4 day text-only spike behind a compose profile before committing.
 
 ### D2. Runtime strategy: CLI shelling vs. Agent SDK
 
