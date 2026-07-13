@@ -365,6 +365,23 @@ Options, roughly in order of value-for-effort:
 
 Recommendation: 2 now (pairs naturally with Stage 1.2), 1 when convenient, 3 as an opt-in hardening profile documented next to tmpfs isolation.
 
+### D7. Secrets in notes: layered protection + fixing the exclusion UX
+
+Two distinct problems today: (a) credentials scattered inside ordinary notes reach the agent's context (and thus the Anthropic API, and potentially a Telegram reply or an injection-driven exfiltration); (b) the current folder-exclusion story is manual and split across three places (soft rules in `CLAUDE.local.md`, tmpfs mounts in `docker-compose.yml`, both edited by SSH on the VPS).
+
+**Ground truth first:** anything the agent is *allowed* to read goes to the LLM provider. Reliable on-the-fly redaction is not achievable while `Bash`/`Grep` return raw text — so the goal is not "agent sees the note but not the password in it", it's **guaranteeing secrets don't live in the readable zone at all**. The layers:
+
+| Layer | What | Enforcement strength | Needs SDK bridge? | Complexity |
+|---|---|---|---|---|
+| **L0: `.agentignore` in the vault root** | gitignore-syntax list of private paths as the *single source of truth*; syncs via Obsidian Sync → **editable from the phone in Obsidian**, no SSH | n/a (it's config) | No | **S** |
+| **L1: generated tool-deny rules** | entrypoint parses `.agentignore` → `Read`/`Edit`/`Write`/`Grep` deny patterns in `settings.json` at container start | Blocks harness file tools; **does not** stop `Bash(cat …)` | No | **S** |
+| **L2: kernel-level exclusion** | entrypoint expands `.agentignore` → `setfacl` deny (agent runs as non-root user) or generated tmpfs/bind overrides; refresh on restart + periodic re-scan for new dirs | **Hard** — even `cat`/`python` get `EACCES`; same strength as today's manual tmpfs, but automatic and vault-managed | No (requires the non-root container change) | **M** |
+| **L3: nightly secret scanner** | gitleaks (MIT; mature regex + entropy rules) sweeps the vault *outside* ignored zones; findings reported to Telegram ("`Projects/homelab.md` appears to contain an API key — move it to a private folder / password manager?"), optionally auto-move behind a confirmation button | Detective, not preventive — catches the passwords exclusion lists can't know about | No (needs the 3.1 scheduler, or a minimal cron until then) | **M** |
+| **L4: egress allowlist** | outbound network restricted to Anthropic/Telegram/transcription endpoints (= D6.3) | Blocks exfiltration even after a successful read + injection | No | M |
+| L5: read-path redaction | SDK-bridge custom read tools masking secret patterns in output; hooks see resolved paths (symlink-proof) | Partial by construction (raw `Bash`/`Grep` bypass); defense-in-depth only | Yes | L, low value alone |
+
+**Recommended shape:** L0+L1 immediately (pure entrypoint work, replaces the manual `CLAUDE.local.md` off-limits list); L2 as the real boundary (folds into the non-root container improvement); L3 once any scheduler exists; L4 as the opt-in hardening profile from D6. L5 only ever as icing. Net effect: private folders managed from any device by editing one file in Obsidian, kernel-enforced; stray credentials actively hunted down instead of silently uploaded.
+
 ---
 
 ## Part 5 — Suggested sequencing
@@ -372,7 +389,7 @@ Recommendation: 2 now (pairs naturally with Stage 1.2), 1 when convenient, 3 as 
 | Order | Item | Complexity | Rationale |
 |---|---|---|---|
 | 1 | 1.1 CI race fix | S–M | Correctness of every future deploy depends on it |
-| 2 | 1.2 deny-list + 1.3 secrets + D6.2 hooks | S each | Security wins, trivially small |
+| 2 | 1.2 deny-list + 1.3 secrets + D6.2 hooks + D7.L0/L1 `.agentignore` | S each | Security wins, trivially small; `.agentignore` also fixes the folder-exclusion UX |
 | 3 | 1.4 docs drift | S | Cheap credibility |
 | 4 | 1.5 pins + dependabot + SECURITY.md | M | Do before images drift further; unlocks headless 0.0.13 |
 | 5 | 2.1 Groq docs + 2.2 Bases/frontmatter + 2.3 models | S each | Pure docs/prompt, immediate user value |
