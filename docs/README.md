@@ -18,3 +18,4 @@ Long-form docs for [obsidian-telegram-agent](../README.md). The main README cove
 | [Security notes](security.md) | Threat model, deny list, prompt-injection notes, full VPS hardening checklist |
 | [Audit and improvement plan](improvement-plan.md) | July 2026 codebase audit, ecosystem review, staged improvement checklist |
 | [SDK bridge plan](sdk-bridge-plan.md) | Assessment and phased design for replacing Takopi with a purpose-built bridge on the Claude Agent SDK |
+| [Bridge spec](bridge-spec.md) | Build specification for the new bridge: Takopi parity checklist, new capabilities (checkpoints/undo, budget guard, scheduler, skills), env contract, phased build plan |

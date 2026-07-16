@@ -332,6 +332,8 @@ The core dependency question: Takopi is dormant.
 
 **Chosen: A now, C as the long-term roadmap direction.** Revisit if (a) a Telegram Bot API or Claude Code CLI change breaks Takopi, or (b) Stage 3 features start fighting the bridge's limits. Option C is assessed in depth — real code-size data from all alternatives, what to build, what to reuse, phased plan — in the dedicated [SDK bridge plan](sdk-bridge-plan.md); its headline: a purpose-built bridge is ~1.5–2.5k lines (the SDK absorbs what made Takopi 21k), start with a 2–4 day text-only spike behind a compose profile before committing.
 
+> **Update (July 2026): option C is now the active direction** — the Stage 3 feature appetite materialized. The build specification (feature set, Takopi parity checklist, phases) lives in [bridge-spec.md](bridge-spec.md); Takopi remains the shipped default until the spec's Phase 4 cutover.
+
 ### D2. Runtime strategy: CLI shelling vs. Agent SDK
 
 Independent of the bridge, the *scheduler* (3.1) and any future components should prefer the **Agent SDK** over `claude -p` when written in Python/TS: structured streaming events instead of stdout parsing, programmatic permission modes, in-process custom tools ("append to note" as a typed function instead of Bash), proper error handling. For shell-level one-shots, `claude -p` remains fine. No immediate action — a guideline for new code.

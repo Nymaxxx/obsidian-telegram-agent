@@ -5,6 +5,8 @@ description: "Design assessment and phased plan for replacing the dormant Takopi
 
 # Own bridge on the Claude Agent SDK: assessment and plan
 
+> **Status (July 2026): the decision to build has been made.** This document remains the assessment record (alternatives, code-size data, why the SDK changes the math). The living build specification — full feature set, Takopi parity checklist, env contract, phased plan — is in **[bridge-spec.md](bridge-spec.md)**.
+
 Companion to the [improvement plan](improvement-plan.md), expanding strategic option [D1.C](improvement-plan.md#d1-bridge-strategy). Based on a July 2026 review of the actual source, size, and issue trackers of every relevant bridge implementation, plus the current Agent SDK API surface.
 
 - [Verdict](#verdict)
