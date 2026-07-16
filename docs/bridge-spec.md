@@ -16,6 +16,7 @@ Working name for the component: **bridge** (directory `bridge/`, compose service
 - [Takopi parity checklist](#takopi-parity-checklist)
 - [Feature specification](#feature-specification)
 - [Environment contract](#environment-contract)
+- [Deployment and operations](#deployment-and-operations)
 - [Testing and CI](#testing-and-ci)
 - [Phased build plan](#phased-build-plan)
 - [Risks](#risks)
@@ -203,15 +204,41 @@ Existing `.env` files keep working. The bridge reads the current surface and add
 
 | Variable | Status |
 |---|---|
-| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (+claim flow), `CLAUDE_MODEL`, `CLAUDE_ALLOWED_TOOLS`, `CLAUDE_DENIED_COMMANDS`, `CLAUDE_EXTRA_INSTRUCTIONS`, `VOICE_*`, `TZ` | **Honored unchanged** |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` (+claim flow), `CLAUDE_MODEL`, `CLAUDE_ALLOWED_TOOLS`, `CLAUDE_DENIED_COMMANDS`, `CLAUDE_EXTRA_INSTRUCTIONS`, `VOICE_*`, `OPENAI_API_KEY`, `TZ` | **Honored unchanged** |
 | `TAKOPI_SESSION_MODE`, `TAKOPI_MESSAGE_OVERFLOW`, `TAKOPI_SHOW_RESUME_LINE` | Honored as legacy aliases of `BRIDGE_*` equivalents |
+| `CLAUDE_USE_API_BILLING` | Accepted, becomes a no-op (the SDK always bills via `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`) |
+| `TAKOPI_DEFAULT_ENGINE`, `TAKOPI_DEFAULT_PROJECT`, `TAKOPI_TOPICS_*` | Read and ignored with one startup log line (single-engine, single-project design) |
 | `ANTHROPIC_API_KEY` | Honored (Anthropic direct) |
 | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` | **New**: Anthropic-compatible providers (AI Tunnel etc.); when `ANTHROPIC_AUTH_TOKEN` is set, `ANTHROPIC_API_KEY` is ignored and never forwarded |
 | `BRIDGE_LOCALE`, `BRIDGE_DAILY_BUDGET_USD`, `BRIDGE_MONTHLY_BUDGET_USD`, `BRIDGE_CHECKPOINT_DAYS`, `BRIDGE_KILL_PHRASE`, `BRIDGE_REACTIONS`, `BRIDGE_COST_FOOTER` | **New**, all with safe defaults |
 | `BRIDGE_CONFIRM_FILE_THRESHOLD` (H1), `BRIDGE_TURNS_PER_HOUR`, `BRIDGE_MAX_TOOL_CALLS_PER_TURN` (H4), `BRIDGE_EGRESS_ALLOWLIST` (H5), `BRIDGE_REDACT_SECRETS` (H6, default on) | **New**, hardening set |
 | `BRIDGE_WEB_*` (web transport: origin, auth, push) | **New**, defined in [web-client-spec.md](web-client-spec.md#environment) |
+| `BRIDGE_AUDIT_KEEP_DAYS` (default 90), `BRIDGE_UID`/`BRIDGE_GID` (default 1000) | **New**, ops (see [Deployment and operations](#deployment-and-operations)) |
 
-Volumes: same `./vault`; `./bridge-state` replaces `./takopi-state` (migration note in cutover docs — only `chat_id` is worth carrying over, and the installer does it automatically). **No secrets are ever written to the state volume** — this closes audit finding S2 by construction.
+Volumes: same `./vault`; `./bridge-state` replaces `./takopi-state` (migration note in cutover docs — only `chat_id` is worth carrying over, and the installer does it automatically; Takopi's CLI session history is not portable and old conversations are not resumable across the cutover). **No secrets are ever written to the state volume** — this closes audit finding S2 by construction.
+
+## Deployment and operations
+
+Everything the bridge must inherit from — or fix in — the surrounding stack ([configuration](configuration.md), [auto-deploy](auto-deploy.md), [operations](operations.md), [backups](backups.md)):
+
+**`CLAUDE.md` assembly moves into the bridge.** Today Takopi's entrypoint regenerates `vault/CLAUDE.md` from the three layers (`CLAUDE.base.md` → `CLAUDE.local.md` → `CLAUDE_EXTRA_INSTRUCTIONS`) once per container start. The bridge takes over the assembly with the same layer order and adds a **file watcher**: editing `CLAUDE.local.md` (from Obsidian on the phone, via sync) regenerates `CLAUDE.md` immediately, and the next *new* session picks it up — the documented "restart the container, then `/new`" ritual reduces to just starting a fresh session; the bridge appends a one-line hint when layers changed mid-session. The SDK is pointed at `/vault/CLAUDE.md` as project memory, preserving today's contract.
+
+**Container parity and health.**
+- Same runtime discipline as the existing services: `mem_limit`/`memswap_limit` (1 GB — Node plus the SDK's engine subprocess), CPU cap, json-file log rotation.
+- Healthcheck becomes a real HTTP `GET /healthz` on localhost instead of `pgrep`, and it reports **healthy while waiting for `/claim`** (with a `waiting_for_claim` status field) — fixing the R1-class cosmetics where a perfectly fine fresh install shows `unhealthy`. `/status` (F13) exposes the same data in chat.
+- The container runs **non-root** (`BRIDGE_UID`/`BRIDGE_GID`, default 1000): agent-created files stop being root-owned on the host, retiring the recurring `sudo chown -R` chore from [operations.md](operations.md). The SDK subprocess inherits the same UID.
+
+**CI and images.**
+- `build-images.yml` gains a `bridge/**` trigger: multi-arch (amd64+arm64) image to GHCR with the same tag scheme; the web frontend bundle is built *inside* the bridge image (static assets served by the web adapter — no CDN, no separate image, no separate deploy).
+- The Stage-1 S1 fix (deploy must not `pull` before the image build for the triggering commit completes) applies to the bridge image identically.
+
+**Installer, Makefile, diagnostics (Phase 4 scope).** `install.sh`/`bootstrap.sh` learn the bridge path (claim auto-extraction, optional web pairing via `make claim-web`, VAPID keygen via `make web-keys`); `inspect.yml` swaps its takopi-internals dump for a bridge-state summary (session count, today's spend, audit tail — secrets stay masked); the [auto-deploy "what persists" table](auto-deploy.md#what-persists-between-deploys) gains `./bridge-state/`.
+
+**State retention.** Everything in `bridge-state/` that grows has a bound: audit log pruned after `BRIDGE_AUDIT_KEEP_DAYS` (default 90), checkpoints after `BRIDGE_CHECKPOINT_DAYS`, `spend.json` compacted to monthly aggregates after a year; display transcripts live as long as their session (deleting/purging an archived session removes its transcript). `/status` shows the state-volume size.
+
+**Backup scope changes.** Unlike `takopi-state/` (disposable), `bridge-state/` now holds data worth keeping: session transcripts, audit trail, spend history, checkpoints. [backups.md](backups.md) gains it as a second backup target next to the vault at cutover.
+
+**Coexistence notes.** Concurrent vault writes with obsidian-headless (audit R3) remain architecturally unsolved — checkpoints shrink the blast radius but the `/undo`-vs-sync race in [Risks](#risks) stands, and off-VPS backups remain the boundary. Optional semantic search (improvement-plan 3.3, qmd) stays an orthogonal opt-in compose service; the bridge only allowlists `Bash(qmd *)` when it is present.
 
 ## Testing and CI
 
@@ -232,7 +259,7 @@ The no-tests status quo (audit 1.4) does not carry over. Minimum bar per phase:
 | **2 — Safety & money** | Checkpoints + `/undo` + `/diff`, budget guard + `/usage` + cost footer, **confirmation gates (H1)**, **rate limiting + anti-runaway (H4)**, **outbound secret redaction (H6)**, `/status`, `/model`, session-size hints, media groups, `/reasoning` | The two headline differentiators (recoverable vault, hard budget) live, plus the hardening core | ~1.5 weeks |
 | **3 — Agentic** | MCP tools (`ask_user`, `send_file`, `schedule_task`), scheduler + digest/heartbeat/cleanup templates with **per-task permission profiles (H3)**, `url-summarizer` subagent + **egress audit/allowlist (H5)**, photos/documents, skills registry, memory templates | The Stage 3 feature set nothing else offers in one place | 1–2 weeks |
 | **W — Web client** | Parallel track, starts after Phase 1; phases W0–W3 defined in [web-client-spec.md](web-client-spec.md) | Android PWA daily driver: capture via share sheet, browsable sessions, diff workbench | 3–4 weeks parallel |
-| **4 — Cutover** | Bridge becomes compose default; Takopi demoted to a fallback profile for one release, then `docs/legacy`; state migration; docs rewrite (sessions, security, configuration); CHANGELOG major | One release shipping both; the next shipping bridge-only | ~1 week incl. docs |
+| **4 — Cutover** | Bridge becomes compose default; Takopi demoted to a fallback profile for one release, then `docs/legacy`; state migration; installer/bootstrap/Makefile updates; `inspect.yml` + deploy workflow updates; docs rewrite (sessions, security, configuration, operations, backups — incl. `bridge-state` as a backup target); CHANGELOG major | One release shipping both; the next shipping bridge-only | ~1 week incl. docs |
 
 Total: **6–8 weeks part-time** for the bridge core, usable daily driver after Phase 1 (~2 weeks in); the web client runs as a parallel track once the core API is stable. Order within phases is flexible; the phase *gates* are not — no write access before the safety hooks exist, no cutover before the E2E suite is green.
 

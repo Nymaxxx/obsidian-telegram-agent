@@ -101,7 +101,8 @@ Adding an inbound HTTPS endpooint is the single biggest security change to a sta
 - **Pairing, not passwords**: first device registers via a one-time claim URL/QR printed by `make claim-web` (same trust model as the Telegram claim token). Registration enrolls a **passkey (WebAuthn)**; subsequent devices are added from an already-authenticated device or a fresh claim token.
 - Per-device revocable tokens (httpOnly, Secure, SameSite=Strict cookies); a devices panel in settings shows and revokes them.
 - Attack surface discipline: exactly one unauthenticated route (`/pair/<token>`, rate-limited, tokens single-use and expiring); everything else 401s without a session. No CORS. Strict CSP, all assets self-hosted (mirrors the artifact-free, CDN-free frontend build).
-- Caddy handles TLS + login rate limiting; fail2ban on the VPS covers the rest (the [security checklist](security.md) gains a web section at cutover).
+- **Prerequisites made explicit**: a DNS A-record pointing `BRIDGE_WEB_DOMAIN` at the VPS, and inbound 80/443 opened in UFW *and* the provider firewall — the first inbound ports in this stack besides SSH. The installer checks both and refuses to enable the profile half-configured.
+- Caddy handles TLS + login rate limiting; fail2ban on the VPS covers the rest (the [security checklist](security.md) gains a web section at cutover). The Caddy sidecar gets the same compose discipline as every other service: mem limit, log rotation, healthcheck.
 - Optional stricter mode documented but not default: bind the web port to a WireGuard/Tailscale interface only — noted for completeness; the whole point of this client is working *without* a VPN, and domestic access to one's own VPS doesn't need one.
 - H6 (outbound secret redaction) applies to this transport identically — redaction happens in the core, before any adapter.
 
@@ -113,6 +114,8 @@ Adding an inbound HTTPS endpooint is the single biggest security change to a sta
 | `BRIDGE_WEB_DOMAIN` | Public domain for Caddy TLS |
 | `BRIDGE_WEB_PUSH_VAPID_PUBLIC` / `_PRIVATE` | Web Push keys (`make web-keys` generates) |
 | `BRIDGE_WEB_QUIET_HOURS` | e.g. `23-08`, suppress non-urgent push |
+
+UI strings follow the bridge's `BRIDGE_LOCALE` (en/ru). Device registrations and push subscriptions live in `bridge-state/` and ride along in its backup scope ([bridge-spec — Deployment and operations](bridge-spec.md#deployment-and-operations)); revoking a device from the settings panel also drops its push subscription. The frontend bundle ships inside the bridge image (built in `build-images.yml`) — no separate deploy artifact.
 
 Compose: profile `web` adds the Caddy sidecar and publishes 443; the bridge container itself stays unpublished.
 
