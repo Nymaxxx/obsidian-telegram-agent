@@ -38,7 +38,6 @@ For non-interactive deploys (cloud-init, CI), see [One-line install](#one-line-i
 - [Configuration](docs/configuration.md)
 - [Sessions and conversation flow](docs/sessions.md)
 - [Vault isolation](docs/vault-isolation.md)
-- [Auto-deploy with GitHub Actions](docs/auto-deploy.md)
 - [Operations and troubleshooting](docs/operations.md)
 - [Cost estimate](#cost-estimate)
 - [Backups](docs/backups.md)
@@ -265,7 +264,6 @@ The sections below moved into [`docs/`](docs/README.md) to keep this README focu
 - **[Configuration](docs/configuration.md)** — `.env` settings, repository layout, agent behavior (`CLAUDE.base.md` / `CLAUDE.local.md` / `CLAUDE_EXTRA_INSTRUCTIONS`), choosing a model.
 - **[Sessions and conversation flow](docs/sessions.md)** — how session resumption works, `/new` and `/cancel`, context accumulation.
 - **[Vault isolation](docs/vault-isolation.md)** — hide folders from the agent (CLAUDE.md vs tmpfs), soft-delete via `.trash/`.
-- **[Auto-deploy with GitHub Actions](docs/auto-deploy.md)** — CI workflows, required secrets, what persists between deploys, SSH setup for CI.
 - **[Operations and troubleshooting](docs/operations.md)** — daily commands, Makefile shortcuts, common issues.
 - **[Backups](docs/backups.md)** — why you need them, recommended approaches, concurrent-write caveat.
 - **[Security notes](docs/security.md)** — threat model, deny list, prompt-injection notes, full VPS hardening checklist.

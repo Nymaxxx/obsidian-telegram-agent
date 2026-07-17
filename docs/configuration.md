@@ -17,7 +17,7 @@ All configuration is done through environment variables in `.env`. See [`.env.ex
 │  ├─ ISSUE_TEMPLATE/         ← bug report / feature request templates
 │  └─ workflows/
 │     ├─ ci.yml               ← shellcheck, hadolint, actionlint, compose validate
-│     └─ deploy.yml           ← auto-deploy on push to main
+│     └─ build-images.yml     ← multi-arch image build/push to GHCR
 ├─ docker-compose.yml
 ├─ .env.example
 ├─ Makefile
@@ -50,7 +50,7 @@ The agent reads `vault/CLAUDE.md` at the start of every session. That file is **
 |---|--------|----------------|-----------|
 | 1 | [`vault/CLAUDE.base.md`](../vault/CLAUDE.base.md) | yes | maintainers, via PR / `git pull` |
 | 2 | `vault/CLAUDE.local.md` | no | you, on the VPS |
-| 3 | `CLAUDE_EXTRA_INSTRUCTIONS` env var | no | `.env`, GitHub Actions Variable, or Secret |
+| 3 | `CLAUDE_EXTRA_INSTRUCTIONS` env var | no | `.env` on the host |
 
 Later sections override earlier ones — if you write a personal rule that contradicts the base, your rule wins because Claude reads it later.
 
@@ -60,7 +60,7 @@ Later sections override earlier ones — if you write a personal rule that contr
 
 - **`CLAUDE.base.md`** — universal safety rules and reasonable defaults that everyone benefits from (deny-list interactions, soft-delete via `.trash/`, message-handling templates, editing style). If your change should ship to everyone, propose a PR against this file.
 - **`CLAUDE.local.md`** — anything specific to *your* vault: real folder names instead of the PARA defaults, the language you write notes in, personal style preferences, additional off-limits paths. `install.sh` seeds this from [`templates/CLAUDE.local.md.example`](../templates/CLAUDE.local.md.example) on first run; edit it freely. The file is in `.gitignore`, so deploys never touch it.
-- **`CLAUDE_EXTRA_INSTRUCTIONS`** — optional, useful when you want all configuration centralized and never want to SSH into the VPS to edit a file. Set it as a [**GitHub Actions Variable**](https://docs.github.com/en/actions/learn-github-actions/variables) (Settings → Secrets and variables → Actions → **Variables** tab) — these are visible in plain text in the UI, easy to inspect and edit, and not masked in logs. Use a Secret instead only if your rules really are sensitive. The [deploy workflow](../.github/workflows/deploy.yml) reads `vars.CLAUDE_EXTRA_INSTRUCTIONS` first and falls back to `secrets.CLAUDE_EXTRA_INSTRUCTIONS`, then writes the value into `.env` on the VPS as a quoted multi-line string. Multi-line content is preserved verbatim.
+- **`CLAUDE_EXTRA_INSTRUCTIONS`** — optional, useful when you want an extra rules layer without editing `CLAUDE.local.md`. Set it in `.env` as a quoted multi-line string; `takopi/entrypoint.sh` appends it when regenerating `vault/CLAUDE.md`. Multi-line content is preserved verbatim.
 
 After changing any layer, send `/new` in Telegram (or `docker compose restart takopi` on the VPS) to start a fresh Claude session that picks up the regenerated `CLAUDE.md`.
 

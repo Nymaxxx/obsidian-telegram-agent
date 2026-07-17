@@ -69,17 +69,6 @@ Then set `OBSIDIAN_AUTOSTART_SYNC=true` in `.env` and restart.
 </details>
 
 <details>
-<summary><strong>Triggering a redeploy after updating a secret</strong></summary>
-
-Go to **Actions > Deploy > Run workflow**, or push an empty commit:
-
-```bash
-git commit --allow-empty -m "redeploy" && git push
-```
-
-</details>
-
-<details>
 <summary><strong>Can't find the /claim token in the install output</strong></summary>
 
 The token is printed by takopi to its container logs. Find the most recent one:
@@ -92,16 +81,3 @@ Send the printed `/claim <token>` command to your bot in Telegram. The bot repli
 
 </details>
 
-<details>
-<summary><strong>SSH "i/o timeout" from GitHub Actions deploy</strong></summary>
-
-Means the deploy job can't reach your VPS on port 22. Check, in order:
-
-1. `VPS_HOST` secret has the right IP (VPSes get new IPs on rebuild).
-2. The VPS is up: `ping <VPS_IP>` from your machine.
-3. UFW or the provider's firewall isn't blocking inbound 22.
-4. The `VPS_SSH_KEY` matches a public key in `~/.ssh/authorized_keys` on the VPS.
-
-See [docs/auto-deploy.md](auto-deploy.md) for the full setup.
-
-</details>

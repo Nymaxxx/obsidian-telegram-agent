@@ -26,10 +26,10 @@ After your VPS is up and the bot is working, lock it down. The order below matte
 
 ### 0. Verify SSH key auth works before touching anything
 
-If you used the GitHub Actions deploy flow (see [docs/auto-deploy.md](auto-deploy.md)), you already have a key. Confirm it works from a fresh terminal:
+Confirm key-based SSH works from a fresh terminal before changing anything else:
 
 ```bash
-ssh -i ~/.ssh/your-deploy-key -o IdentitiesOnly=yes root@<VPS_IP>
+ssh -i ~/.ssh/your-key -o IdentitiesOnly=yes root@<VPS_IP>
 ```
 
 Must log in **without prompting for a password**. If it asks for one or fails — stop, fix the key first.
