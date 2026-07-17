@@ -42,12 +42,15 @@ Working name for the component: **bridge** (directory `bridge/`, compose service
 
 > **Scope change (July 2026):** a self-hosted **web client (PWA)** is now in scope as a first-class transport — see [web-client-spec.md](web-client-spec.md). Rationale: Telegram is officially blocked/degraded in Russia since February 2026, which forces the operator onto a VPN — defeating the AI-Tunnel motivation — and its single linear session model erases history that the web client can keep browsable. A public multi-user web SaaS remains a non-goal.
 
+> **Scope change (July 2026, hosting):** the stack moves off the rented VPS and behind the operator's own infrastructure — the **home server under Coolify**, published through the existing tiered wildcard routing as tier A `agent.app.syntexia.ru` (VPS Traefik terminates TLS, Authentik authenticates). The contract this imposes on the code is in [Deployment target](#deployment-target-the-home-server-under-coolify); two consequences reach the plan itself. The web client's entire authentication subsystem is **deleted** (Authentik does it). And Telegram polling from a domestic ISP is expected to degrade, so the web client becomes the primary transport, Telegram becomes best-effort, and the W-track moves ahead of Phases 2–3.
+
 ## Architecture
 
 | Decision | Choice | Rationale |
 |---|---|---|
 | Language | **TypeScript, Node 22** | SDK reference implementation is TS; both donor codebases (linuz90, nanoclaw) are TS; `node:22-alpine` base already in the stack |
-| Transports | **Pluggable `Transport` interface**; adapters: Telegram (grammY) and Web PWA ([web-client-spec.md](web-client-spec.md)), each behind a compose profile | Telegram availability in RU is degrading; the core must not care where messages come from |
+| Transports | **Pluggable `Transport` interface**; adapters: Telegram (grammY) and Web PWA ([web-client-spec.md](web-client-spec.md)), each behind a compose profile | Telegram availability in RU is degrading, and hosting at home removes the egress path it currently polls from — the web client becomes the primary transport and the core must not care where messages come from |
+| Hosting | **Home server under Coolify**, published as tier A `agent.app.syntexia.ru` behind the VPS Traefik and Authentik (homelab `docs/guides/app-deploy-requirements.md`) | Domain, TLS, CrowdSec and SSO already exist at the edge; the bridge ships one plain-HTTP port, no certificates, and no login code |
 | Telegram library | **grammY** | Long-polling, typed, excellent middleware; used by the best donor |
 | Agent runtime | **`@anthropic-ai/claude-agent-sdk`**, public API only, version pinned | The whole premise; `_internal` is banned (RichardAtCT's breakage lesson) |
 | Process model | Single container, single process: grammY loop + per-chat turn queue + asyncio-style scheduler tick | One thing to deploy, one thing to healthcheck |
@@ -61,8 +64,8 @@ Component budget (~2.5–3k lines — slightly above the assessment's estimate b
 bridge/src/
   transport/     Transport interface + telegram adapter (grammY, claim,
                  media handlers, coalescing)                               ~450
-  web/           web transport adapter: REST + WS API, auth, Web Push
-                 (frontend lives in web-client-spec.md, ~2.5k more)        ~600
+  web/           web transport adapter: REST + WS API, proxy-auth check,
+                 Web Push (frontend in web-client-spec.md, ~2.5k more)     ~500
   session/       session store, resume + fallbacks, turn queue, steering   ~450
   render/        markdown → Telegram HTML, fence-aware split, fallbacks    ~350
   status/        streaming progress message, reactions, error UX           ~300
@@ -144,7 +147,7 @@ Tool events map to human lines with the target path; text deltas replace the sta
   - `/undo` reverts the last turn's changes (with a confirmation button showing the file list); `/diff` shows what the last turn touched.
   - Scheduler runs are checkpointed the same way.
   - Retention: prune snapshots older than `BRIDGE_CHECKPOINT_DAYS` (default 14).
-  - This does **not** replace off-VPS backups ([backups.md](backups.md) stands), but it converts the most common failure — "the agent mangled a note and I noticed immediately" — from an incident into a two-tap recovery.
+  - This does **not** replace off-box backups ([backups.md](backups.md) stands), but it converts the most common failure — "the agent mangled a note and I noticed immediately" — from an incident into a two-tap recovery.
 
 **Hardening set (H1–H6).** What owning the agent loop makes possible beyond the baseline above — the security model shifts from "negotiate with the agent via instructions and fence it from outside" to "every action passes through code we control":
 
@@ -212,33 +215,51 @@ Existing `.env` files keep working. The bridge reads the current surface and add
 | `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` | **New**: Anthropic-compatible providers (AI Tunnel etc.); when `ANTHROPIC_AUTH_TOKEN` is set, `ANTHROPIC_API_KEY` is ignored and never forwarded |
 | `BRIDGE_LOCALE`, `BRIDGE_DAILY_BUDGET_USD`, `BRIDGE_MONTHLY_BUDGET_USD`, `BRIDGE_CHECKPOINT_DAYS`, `BRIDGE_KILL_PHRASE`, `BRIDGE_REACTIONS`, `BRIDGE_COST_FOOTER` | **New**, all with safe defaults |
 | `BRIDGE_CONFIRM_FILE_THRESHOLD` (H1), `BRIDGE_TURNS_PER_HOUR`, `BRIDGE_MAX_TOOL_CALLS_PER_TURN` (H4), `BRIDGE_EGRESS_ALLOWLIST` (H5), `BRIDGE_REDACT_SECRETS` (H6, default on) | **New**, hardening set |
-| `BRIDGE_WEB_*` (web transport: origin, auth, push) | **New**, defined in [web-client-spec.md](web-client-spec.md#environment) |
+| `BRIDGE_WEB_*` (web transport: public URL, listen address, proxy-auth headers, push) | **New**, defined in [web-client-spec.md](web-client-spec.md#environment) |
 | `BRIDGE_AUDIT_KEEP_DAYS` (default 90), `BRIDGE_UID`/`BRIDGE_GID` (default 1000) | **New**, ops (see [Deployment and operations](#deployment-and-operations)) |
 
-Volumes: same `./vault`; `./bridge-state` replaces `./takopi-state` (migration note in cutover docs — only `chat_id` is worth carrying over, and the installer does it automatically; Takopi's CLI session history is not portable and old conversations are not resumable across the cutover). **No secrets are ever written to the state volume** — this closes audit finding S2 by construction.
+Volumes: same `./vault`; `./bridge-state` replaces `./takopi-state` (migration note in cutover docs — only `chat_id` is worth carrying over, and the installer does it automatically; Takopi's CLI session history is not portable and old conversations are not resumable across the cutover). Both become Coolify persistent volumes at the move. **No secrets are ever written to the state volume** — this closes audit finding S2 by construction, and the Coolify move reinforces it: the env comes from Coolify's UI, so there is no `.env` on disk to leak into a volume backup either.
 
 ## Deployment and operations
 
 Everything the bridge must inherit from — or fix in — the surrounding stack ([configuration](configuration.md), [auto-deploy](auto-deploy.md), [operations](operations.md), [backups](backups.md)):
 
+### Deployment target: the home server under Coolify
+
+The stack leaves the "VPS plus `docker compose` over SSH" model and moves behind the operator's own infrastructure: the home server, managed by **Coolify**, published through the homelab's tiered wildcard routing as **`agent.app.syntexia.ru`** — tier A, i.e. Authentik + CrowdSec + norobots. The binding contract is the homelab repo's `docs/guides/app-deploy-requirements.md`; the app-visible consequence is that the bridge runs behind a **double reverse proxy** and sees plain HTTP even though the client sees `https://`:
+
+```
+Phone ──HTTPS──▶ VPS Traefik ──(TLS terminates, forward-auth)──▶ Netmaker mesh
+       ──HTTP──▶ Coolify proxy (Traefik) ──HTTP──▶ bridge container
+```
+
+- **One plain-HTTP port on `0.0.0.0`, published nowhere.** Coolify's proxy routes to the container by name; a `localhost` bind would be invisible to it, and a published host port is exactly what the wildcard model removed.
+- **Trust the proxy, never redirect.** `X-Forwarded-Proto` / `-Host` / `-For` are the source of truth for absolute URLs and client IPs. The bridge issues no HTTPS redirect of its own — it would see `http` from the proxy and loop forever — and marks cookies `Secure` unconditionally instead of inferring from the request scheme. The `Host` header is validated against `BRIDGE_WEB_PUBLIC_URL`: a mismatch is a deliberate 400, not a silent 200.
+- **The domain is env, not code**, and specifically not a build-time constant — the frontend bundle is built in CI before any domain exists. The trap and the runtime-config fix: [web-client-spec — Environment](web-client-spec.md#environment).
+- **Health is routing, not cosmetics.** Traefik's Docker provider **does not publish a router for an `unhealthy` container at all** — the failure presents as a flat `404 page not found` from Traefik, not a 502, as though the host never existed. Two consequences. First, the Docker `HEALTHCHECK` must probe **`127.0.0.1`, never `localhost`**: on Alpine/musl `localhost` resolves to `::1` first, where a single-stack IPv4 listener isn't, and the container hangs `unhealthy` forever while the service answers fine. Second, the R1-class decision to report **healthy while waiting for `/claim`** stops being a nicety — an unhealthy bridge is an unrouted bridge, including the web UI you would have diagnosed it from.
+- **Volumes, or it's gone.** Coolify recreates the container on every deploy, so `/vault` and `bridge-state/` must be declared persistent volumes. `BRIDGE_UID`/`BRIDGE_GID` (default 1000) must line up with the volume's ownership on the host — Coolify-created bind mounts land root-owned, so either pre-`chown` the path or have a root entrypoint fix ownership and drop privileges before exec.
+- **Secrets move to the Coolify UI** and stop living in a `.env` rendered by CI from GitHub Secrets. That retires the deploy workflow's `.env` step and `inspect.yml`'s sanitized `.env` dump — Coolify's UI becomes the source of truth. `docker inspect` on the host still exposes them ([security.md](security.md)), and the home box now runs the rest of the homelab alongside the bridge, so that caveat grows: the Docker socket on this host is a credential for the vault too.
+- **CI's job ends at the registry.** `build-images.yml` keeps building multi-arch images to GHCR (web bundle included); deployment becomes a Coolify webhook fired *after* the build for the triggering commit finishes, pinned to the immutable `<short-sha>` tag rather than `latest`. This is also the honest fix for audit finding **S1** — the stale-image race disappears once the deploy names an exact image instead of pulling a mutable tag.
+- **Tier choice is settled: A, not B.** `*.app` gives the web client Authentik forward-auth for free; the bridge implements no login and validates two headers instead ([web-client-spec — Auth and exposure model](web-client-spec.md#auth-and-exposure-model)). `*.pub` would mean writing the authentication this spec just deleted.
+
 **`CLAUDE.md` assembly moves into the bridge.** Today Takopi's entrypoint regenerates `vault/CLAUDE.md` from the three layers (`CLAUDE.base.md` → `CLAUDE.local.md` → `CLAUDE_EXTRA_INSTRUCTIONS`) once per container start. The bridge takes over the assembly with the same layer order and adds a **file watcher**: editing `CLAUDE.local.md` (from Obsidian on the phone, via sync) regenerates `CLAUDE.md` immediately, and the next *new* session picks it up — the documented "restart the container, then `/new`" ritual reduces to just starting a fresh session; the bridge appends a one-line hint when layers changed mid-session. The SDK is pointed at `/vault/CLAUDE.md` as project memory, preserving today's contract.
 
 **Container parity and health.**
 - Same runtime discipline as the existing services: `mem_limit`/`memswap_limit` (1 GB — Node plus the SDK's engine subprocess), CPU cap, json-file log rotation.
-- Healthcheck becomes a real HTTP `GET /healthz` on localhost instead of `pgrep`, and it reports **healthy while waiting for `/claim`** (with a `waiting_for_claim` status field) — fixing the R1-class cosmetics where a perfectly fine fresh install shows `unhealthy`. `/status` (F13) exposes the same data in chat.
+- Healthcheck becomes a real HTTP `GET /healthz` (probed at `127.0.0.1` — see above) instead of `pgrep`, and it reports **healthy while waiting for `/claim`** (with a `waiting_for_claim` status field), fixing the R1-class cosmetics where a perfectly fine fresh install shows `unhealthy`. `/status` (F13) exposes the same data in chat.
 - The container runs **non-root** (`BRIDGE_UID`/`BRIDGE_GID`, default 1000): agent-created files stop being root-owned on the host, retiring the recurring `sudo chown -R` chore from [operations.md](operations.md). The SDK subprocess inherits the same UID.
 
 **CI and images.**
 - `build-images.yml` gains a `bridge/**` trigger: multi-arch (amd64+arm64) image to GHCR with the same tag scheme; the web frontend bundle is built *inside* the bridge image (static assets served by the web adapter — no CDN, no separate image, no separate deploy).
-- The Stage-1 S1 fix (deploy must not `pull` before the image build for the triggering commit completes) applies to the bridge image identically.
+- The Stage-1 S1 fix is superseded rather than ported: deploying by `<short-sha>` through a post-build Coolify webhook removes the mutable-tag race by construction (see above).
 
-**Installer, Makefile, diagnostics (Phase 4 scope).** `install.sh`/`bootstrap.sh` learn the bridge path (claim auto-extraction, optional web pairing via `make claim-web`, VAPID keygen via `make web-keys`); `inspect.yml` swaps its takopi-internals dump for a bridge-state summary (session count, today's spend, audit tail — secrets stay masked); the [auto-deploy "what persists" table](auto-deploy.md#what-persists-between-deploys) gains `./bridge-state/`.
+**Installer, Makefile, diagnostics (Phase 4 scope).** `install.sh`/`bootstrap.sh` learn the bridge path (claim auto-extraction, VAPID keygen via `make web-keys`, a preflight for the Coolify preconditions — `http` scheme, Force HTTPS off, proxy secret present on both sides); `inspect.yml` loses its `.env` dump (Coolify owns secrets now) and swaps its takopi-internals dump for a bridge-state summary (session count, today's spend, audit tail — secrets stay masked); the [auto-deploy "what persists" table](auto-deploy.md#what-persists-between-deploys) is rewritten around Coolify persistent volumes rather than gitignored host directories.
 
 **State retention.** Everything in `bridge-state/` that grows has a bound: audit log pruned after `BRIDGE_AUDIT_KEEP_DAYS` (default 90), checkpoints after `BRIDGE_CHECKPOINT_DAYS`, `spend.json` compacted to monthly aggregates after a year; display transcripts live as long as their session (deleting/purging an archived session removes its transcript). `/status` shows the state-volume size.
 
-**Backup scope changes.** Unlike `takopi-state/` (disposable), `bridge-state/` now holds data worth keeping: session transcripts, audit trail, spend history, checkpoints. [backups.md](backups.md) gains it as a second backup target next to the vault at cutover.
+**Backup scope changes.** Unlike `takopi-state/` (disposable), `bridge-state/` now holds data worth keeping: session transcripts, audit trail, spend history, checkpoints. [backups.md](backups.md) gains it as a second backup target next to the vault at cutover — and its off-site story now has to point *away from the house*, where both the vault and every backup-worthy volume live after the move.
 
-**Coexistence notes.** Concurrent vault writes with obsidian-headless (audit R3) remain architecturally unsolved — checkpoints shrink the blast radius but the `/undo`-vs-sync race in [Risks](#risks) stands, and off-VPS backups remain the boundary. Optional semantic search (improvement-plan 3.3, qmd) stays an orthogonal opt-in compose service; the bridge only allowlists `Bash(qmd *)` when it is present.
+**Coexistence notes.** Concurrent vault writes with obsidian-headless (audit R3) remain architecturally unsolved — checkpoints shrink the blast radius but the `/undo`-vs-sync race in [Risks](#risks) stands, and off-box backups remain the boundary. Optional semantic search (improvement-plan 3.3, qmd) stays an orthogonal opt-in compose service; the bridge only allowlists `Bash(qmd *)` when it is present.
 
 ## Testing and CI
 
@@ -258,10 +279,12 @@ The no-tests status quo (audit 1.4) does not carry over. Minimum bar per phase:
 | **1 — Parity+** | Claim binding, `/new` `/cancel`, multi-session store, turn queue + steering buttons, streaming status, reactions, error UX, voice, forward coalescing, backlog processing, PreToolUse enforcement + audit + kill-phrase, **`.agentignore` enforcement (H2)**, permission-profile interface (H3 design), env compatibility, localization, E2E suite | Daily driver replacing the used Takopi subset; existing `.env` works unchanged; write access enabled | 1–2 weeks |
 | **2 — Safety & money** | Checkpoints + `/undo` + `/diff`, budget guard + `/usage` + cost footer, **confirmation gates (H1)**, **rate limiting + anti-runaway (H4)**, **outbound secret redaction (H6)**, `/status`, `/model`, session-size hints, media groups, `/reasoning` | The two headline differentiators (recoverable vault, hard budget) live, plus the hardening core | ~1.5 weeks |
 | **3 — Agentic** | MCP tools (`ask_user`, `send_file`, `schedule_task`), scheduler + digest/heartbeat/cleanup templates with **per-task permission profiles (H3)**, `url-summarizer` subagent + **egress audit/allowlist (H5)**, photos/documents, skills registry, memory templates | The Stage 3 feature set nothing else offers in one place | 1–2 weeks |
-| **W — Web client** | Parallel track, starts after Phase 1; phases W0–W3 defined in [web-client-spec.md](web-client-spec.md) | Android PWA daily driver: capture via share sheet, browsable sessions, diff workbench | 3–4 weeks parallel |
-| **4 — Cutover** | Bridge becomes compose default; Takopi demoted to a fallback profile for one release, then `docs/legacy`; state migration; installer/bootstrap/Makefile updates; `inspect.yml` + deploy workflow updates; docs rewrite (sessions, security, configuration, operations, backups — incl. `bridge-state` as a backup target); CHANGELOG major | One release shipping both; the next shipping bridge-only | ~1 week incl. docs |
+| **W — Web client** | Starts after Phase 1 and **runs ahead of Phases 2–3**; W0 carries the move to home Coolify; phases W0–W3 defined in [web-client-spec.md](web-client-spec.md) | Android PWA daily driver: capture via share sheet, browsable sessions, diff workbench | 3–4 weeks |
+| **4 — Cutover** | Bridge becomes compose default; Takopi demoted to a fallback profile for one release, then `docs/legacy`; state migration; installer/bootstrap/Makefile updates; `inspect.yml` + deploy-pipeline rewrite (SSH deploy → GHCR build + Coolify webhook); docs rewrite (sessions, security, configuration, operations, backups, auto-deploy — incl. `bridge-state` as a backup target, and a forward-auth section in place of the VPS-firewall guidance); CHANGELOG major | One release shipping both; the next shipping bridge-only | ~1 week incl. docs |
 
-Total: **6–8 weeks part-time** for the bridge core, usable daily driver after Phase 1 (~2 weeks in); the web client runs as a parallel track once the core API is stable. Order within phases is flexible; the phase *gates* are not — no write access before the safety hooks exist, no cutover before the E2E suite is green.
+**Ordering after the hosting decision: 0 → 1 → W0 → W1 → W2 → 2 → W3 → 3 → 4.** The deployment-target switch lands with **W0**, because the web adapter's domain, forward-auth headers and double-proxy hop are precisely what it has to be tested against. Phases 0–1 develop against the current VPS deployment, where Telegram long-polling still works and the spike is cheapest to feel out. After the move, polling `api.telegram.org` from a domestic ISP is expected to degrade: the Telegram transport becomes **best-effort**, stops being a gate for anything, and the daily-driver bar moves from Phase 1 to W1. Nothing in Phases 2–4 depends on Telegram — which is exactly what the `Transport` interface was bought for, sooner than expected.
+
+Total: **6–8 weeks part-time** for the bridge core plus the web track, with a usable daily driver at Phase 1 (~2 weeks in, still on the VPS) and again at W1 (on the home server, transport-independent). Order within phases is flexible; the phase *gates* are not — no write access before the safety hooks exist, no cutover before the E2E suite is green.
 
 ## Risks
 
@@ -269,4 +292,7 @@ Inherited from the [assessment](sdk-bridge-plan.md#risks-and-honest-costs) (main
 
 - **Checkpoint interplay with Obsidian Sync**: a sync pull can land between snapshot and `/undo`, making the revert clobber a legitimate remote edit. Mitigation: `/undo` shows the file list and warns when files changed *after* the checkpoint; per-file revert selection if it proves common in practice.
 - **Budget guard accuracy on aggregators**: `total_cost_usd` reflects Anthropic list prices, not the provider's markup. Mitigation: `BRIDGE_COST_MULTIPLIER` (default 1.0) documented next to the AI Tunnel setup; the guard is a safety net, not accounting.
+- **The `*.app` tier is a shared SPOF, and the fallback transport is the one being demoted.** A Coolify-proxy or mesh-link failure 502s the whole namespace at once (the wildcard model's own documented risk), and a Telegram adapter that no longer polls from home cannot cover for it — a stack with two transports can still have one outage that takes both. Mitigations: Uptime Kuma monitors on the proxy *and* on `agent.app`; keep the Telegram adapter shipped and configurable so a VPN-assisted fallback stays one env change away rather than a rebuild; scheduled-task results queue rather than vanish when no transport is reachable.
+- **Trusting proxy headers is a placement decision, not a code decision.** The bridge's identity check is only as strong as where the edge injects its secret; get it wrong and anything on the home docker network authenticates as the operator. Spelled out in [web-client-spec — Auth and exposure model](web-client-spec.md#auth-and-exposure-model); the point here is that this is a *deployment* review item, invisible in this repo's code.
+- **Coolify preconditions fail silently and misleadingly.** Force HTTPS left on → redirect loop; `localhost` in the `HEALTHCHECK` → permanently `unhealthy` → Traefik serves a flat 404 for a service that works. Both look like application bugs and aren't. The installer preflight and the healthcheck tests exist to keep these out of debugging sessions.
 - **Scope creep via F7–F13**: the feature list above is the ceiling, not the floor. Anything not listed needs a removal or a demonstrated need first — same rule as the assessment's non-goals.

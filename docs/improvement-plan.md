@@ -356,6 +356,8 @@ Covered in [2.3](#23-voice-transcription): document Groq as recommended (S, Stag
 
 Managed Agents (Anthropic-hosted loop, cron, memory stores) could eventually replace the VPS entirely, but the vault must then live inside Anthropic's sandbox — incompatible with Obsidian Sync headless today, beta API, vendor lock-in. **Watch.** Re-evaluate when it exits beta or gains external-volume mounting.
 
+> **Update (July 2026): decided in the opposite direction** — the stack moves *toward* self-hosting, not away from it: onto the operator's **home server under Coolify**, published behind their own edge (VPS Traefik terminates TLS, Authentik authenticates) as tier A `agent.app.syntexia.ru`. It ships with the bridge's web-client track rather than as a separate project; the app-side contract, the phase impact and the new risks are in [bridge-spec — Deployment target](bridge-spec.md#deployment-target-the-home-server-under-coolify). Managed Agents stay on Watch, and the case for them is now weaker rather than stronger — the vault lives on hardware the operator owns, next to the SSO that guards it.
+
 ### D6. Prompt-injection hardening
 
 Options, roughly in order of value-for-effort:
